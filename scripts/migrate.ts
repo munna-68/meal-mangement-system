@@ -10,21 +10,28 @@ import { Pool } from "pg";
 
 config({ path: ".env" });
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL is not set");
+async function main() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not set");
+  }
+
+  const isLocal = /(^|@)(localhost|127\.0\.0\.1|\[::1\])/.test(connectionString);
+  const pool = new Pool({
+    connectionString,
+    max: 1,
+    ...(isLocal ? {} : { ssl: { rejectUnauthorized: false } }),
+  });
+
+  const db = drizzle(pool);
+
+  await migrate(db, { migrationsFolder: "./drizzle" });
+  console.log("[migrate] migrations applied");
+
+  await pool.end();
 }
 
-const isLocal = /(^|@)(localhost|127\.0\.0\.1|\[::1\])/.test(connectionString);
-const pool = new Pool({
-  connectionString,
-  max: 1,
-  ...(isLocal ? {} : { ssl: { rejectUnauthorized: false } }),
+main().catch((error) => {
+  console.error("[migrate] failed", error);
+  process.exit(1);
 });
-
-const db = drizzle(pool);
-
-await migrate(db, { migrationsFolder: "./drizzle" });
-console.log("[migrate] migrations applied");
-
-await pool.end();

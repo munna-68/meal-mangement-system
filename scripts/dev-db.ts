@@ -16,31 +16,38 @@ const DATA_DIR = resolve(process.cwd(), ".pglite");
 const PORT = Number(process.env.PGLITE_PORT ?? 5432);
 const HOST = "127.0.0.1";
 
-mkdirSync(DATA_DIR, { recursive: true });
+async function main() {
+  mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new PGlite(DATA_DIR);
-await db.waitReady;
+  const db = new PGlite(DATA_DIR);
+  await db.waitReady;
 
-const server = new PGLiteSocketServer({
-  db,
-  port: PORT,
-  host: HOST,
-  maxConnections: 10,
+  const server = new PGLiteSocketServer({
+    db,
+    port: PORT,
+    host: HOST,
+    maxConnections: 10,
+  });
+
+  await server.start();
+
+  console.log(
+    `[dev-db] Postgres listening on postgresql://postgres:postgres@${HOST}:${PORT}/postgres`,
+  );
+  console.log(`[dev-db] data directory: ${DATA_DIR}`);
+
+  const shutdown = async () => {
+    console.log("\n[dev-db] shutting down");
+    await server.stop();
+    await db.close();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+main().catch((error) => {
+  console.error("[dev-db] failed to start", error);
+  process.exit(1);
 });
-
-await server.start();
-
-console.log(
-  `[dev-db] Postgres listening on postgresql://postgres:postgres@${HOST}:${PORT}/postgres`,
-);
-console.log(`[dev-db] data directory: ${DATA_DIR}`);
-
-const shutdown = async () => {
-  console.log("\n[dev-db] shutting down");
-  await server.stop();
-  await db.close();
-  process.exit(0);
-};
-
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
