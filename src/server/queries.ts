@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -271,6 +271,35 @@ export async function getClosedMonths(): Promise<MonthKey[]> {
 export async function getLastClosedMonth(): Promise<MonthKey | null> {
   const months = await getClosedMonths();
   return months[0] ?? null;
+}
+
+/**
+ * The earliest date any ledger activity happened, used to work out where the
+ * open period begins when no month has been closed yet.
+ */
+export async function getEarliestActivityDate(): Promise<DateKey | null> {
+  const [changes, guestRows, depositRows] = await Promise.all([
+    db
+      .select({ earliest: sql<string | null>`min(${mealStatusChanges.date})` })
+      .from(mealStatusChanges),
+    db
+      .select({ earliest: sql<string | null>`min(${guestMeals.date})` })
+      .from(guestMeals),
+    db
+      .select({ earliest: sql<string | null>`min(${deposits.date})` })
+      .from(deposits),
+  ]);
+
+  const candidates = [
+    changes[0]?.earliest,
+    guestRows[0]?.earliest,
+    depositRows[0]?.earliest,
+  ].filter((value): value is DateKey => typeof value === "string" && value.length > 0);
+
+  if (candidates.length === 0) return null;
+  return candidates.reduce((earliest, value) =>
+    value < earliest ? value : earliest,
+  );
 }
 
 export async function getSettlementRowsForMonth(month: MonthKey) {

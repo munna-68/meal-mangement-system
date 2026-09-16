@@ -15,7 +15,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { GuestBadge, MEAL_STATUS_META } from "@/components/meal-status";
 import { Switch } from "@/components/ui/switch";

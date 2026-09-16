@@ -19,7 +19,11 @@ import {
 import { formatTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { ensureAutoExtrasForRange } from "@/server/auto-extras";
-import { getLastClosedMonth, loadLedgerSnapshot } from "@/server/queries";
+import {
+  getEarliestActivityDate,
+  getLastClosedMonth,
+  loadLedgerSnapshot,
+} from "@/server/queries";
 
 export const metadata: Metadata = { title: "Balances" };
 
@@ -28,12 +32,13 @@ export default async function BalancesPage() {
 
   const today = todayKey();
   const lastClosed = await getLastClosedMonth();
+  const earliestActivity = await getEarliestActivityDate();
 
   // Make sure every recurring daily cost in the open period exists, otherwise
   // the month-to-date figure would understate what members owe.
   const periodStart = lastClosed
     ? addDays(monthEnd(lastClosed), 1)
-    : monthStart(monthOf(today));
+    : monthStart(monthOf(earliestActivity ?? today));
   try {
     await ensureAutoExtrasForRange(periodStart, today);
   } catch {

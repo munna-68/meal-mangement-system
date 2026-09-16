@@ -620,6 +620,53 @@ section("In-progress month stops at today");
 }
 
 // ---------------------------------------------------------------------------
+// Open period with nothing closed yet
+// ---------------------------------------------------------------------------
+
+section("Open period starts where the data starts");
+{
+  // Members who have been around since January, with the first status change in
+  // February and no month ever closed.
+  const longStanding = MEMBERS.map((m) => ({ ...m, joinDate: "2025-01-01" }));
+
+  const result = computeRunningBalances({
+    members: longStanding,
+    rooms: ROOMS,
+    changes: [
+      { memberId: "m1", date: "2025-02-10", status: "FULL", sehri: false },
+    ],
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [RATE_CARD],
+    deposits: [],
+    settlements: [],
+    lastClosedMonth: null,
+    today: "2025-03-05",
+  });
+
+  check(
+    "period begins at the first month with activity, not the current month",
+    result.periodStart,
+    "2025-02-01",
+  );
+
+  const m1 = result.rows.find((r) => r.memberId === "m1")!;
+  const m2 = result.rows.find((r) => r.memberId === "m2")!;
+  const m3 = result.rows.find((r) => r.memberId === "m3")!;
+  const m4 = result.rows.find((r) => r.memberId === "m4")!;
+
+  // m1: Feb 10-28 (19 days) + Mar 1-5 (5 days) = 24 full days at 60,
+  // plus one month's Khala in each of February and March.
+  check("February's meals are included", m1.cost, 24 * 60 + 300 + 300);
+  // The others never had a status recorded, so they only carry month charges:
+  // Khala normal twice for the shared/1-cap rooms, solo twice for m3.
+  check("no status means only month-level charges (shared room)", m2.cost, 600);
+  check("no status means only month-level charges (alone in a 2-bed)", m3.cost, 800);
+  check("no status means only month-level charges (1-bed room)", m4.cost, 600);
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 

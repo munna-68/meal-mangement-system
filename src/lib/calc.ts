@@ -1013,9 +1013,22 @@ export function computeRunningBalances(input: {
     }
   }
 
+  // The open period starts the day after the last closed month. When nothing
+  // has been closed yet, it starts at the earliest month with any activity, so
+  // a manager who has never closed a month still sees the full picture.
   const periodStart = lastClosedMonth
     ? addDays(monthEnd(lastClosedMonth), 1)
-    : monthStart(monthOf(today));
+    : monthStart(
+        monthOf(
+          earliestOf([
+            ...changes.map((change) => change.date),
+            ...guestMeals.map((guest) => guest.date),
+            ...deposits.map((deposit) => deposit.date),
+            ...extras.filter((item) => !item.voided).map((item) => item.date),
+            today,
+          ]) ?? today,
+        ),
+      );
 
   const periodEnd = today;
 
@@ -1094,6 +1107,15 @@ export function computeRunningBalances(input: {
   };
 
   return { periodStart, periodEnd, rows, summary };
+}
+
+/** The smallest date key in a list, or null when the list is empty. */
+function earliestOf(dates: DateKey[]): DateKey | null {
+  let earliest: DateKey | null = null;
+  for (const date of dates) {
+    if (!earliest || compare(date, earliest) < 0) earliest = date;
+  }
+  return earliest;
 }
 
 function nextMonthKey(month: MonthKey): MonthKey {
