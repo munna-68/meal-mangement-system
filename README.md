@@ -142,16 +142,16 @@ turned off for a single day from Today's Bazar.
 
 | Route | Notes |
 | --- | --- |
-| `/today` | **Mobile-first.** Budget breakdown, duty, deduction, cash, menu notes, PDF slip |
+| `/today` | **Mobile-first.** Budget breakdown, duty, deduction, cash, PDF slip. Confirming the day is what registers its recurring costs |
 | `/meals` | **Mobile-first.** Sticky status grid with per-member guest meals |
-| `/balances` | Running balance, deficit warnings, mess-wide float |
-| `/settlement` | Preview, close, reopen a month; export the ledger |
-| `/members` | Rooms and members |
-| `/roster` | Manual bazar duty, up to two rooms per day, Khala flag |
-| `/deposits` | Deposit ledger and per-member totals |
-| `/extras` | Extra line items and monthly electricity/wifi bills |
-| `/rates` | Versioned rate card |
-| `/settings` | Hostel name and address, Ramadan mode |
+| `/balances` | Running balance, deficit warnings, mess-wide float, PDF balance sheet |
+| `/settlement` | Preview, close, reopen a month; export the ledger and the meal register |
+| `/members` | Rooms (number, type, notes) and members (name, room, phone, blood, active) |
+| `/roster` | Sequential auto-fill from a start room, drag-to-swap, Khala flag, PDF duty list |
+| `/deposits` | Deposit ledger and per-member totals, with type-to-find member search |
+| `/extras` | One-off extra costs and monthly electricity/wifi bills |
+| `/rates` | Versioned rate card (meals, guests, Khala normal/solo, Sehri, manager fee) |
+| `/settings` | Hostel name and address, Ramadan mode, solo utility multiples |
 
 ## PDF exports
 
