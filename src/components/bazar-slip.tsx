@@ -51,18 +51,8 @@ export function BazarSlip({
 
   const showSehri = ramadanMode && totals.sehriCount > 0;
   const rate = totals.rateCard;
-
-  // Guests eat with their host, so the paper form notes them inside the same
-  // রাত / দুপুর cell as "base+guests" rather than in a column of their own.
-  const cell = (base: number, guests: number) =>
-    guests > 0 ? (
-      <>
-        {bn(base)}
-        <span className={styles.guestSuffix}>+{bn(guests)}</span>
-      </>
-    ) : (
-      bn(base)
-    );
+  const grandGuestFull = rooms.reduce((total, room) => total + room.guestFullCount, 0);
+  const grandGuestHalf = rooms.reduce((total, room) => total + room.guestHalfCount, 0);
 
   return (
     <div className={styles.slip} lang="bn">
@@ -89,30 +79,37 @@ export function BazarSlip({
               <th>ক্রম নং</th>
               <th>রাত</th>
               <th>দুপুর</th>
+              <th className={styles.guestCol}>গেস্ট ফুল</th>
+              <th className={styles.guestCol}>গেস্ট হাফ</th>
             </tr>
           </thead>
           <tbody>
             {rooms.map((room) => (
-              <tr key={room.roomId}>
+              <tr key={room.roomId} className={styles.roomRow}>
                 <td className={styles.roomNo}>{bn(room.roomNumber)}</td>
-                <td>{cell(room.nightCount, room.guestCount)}</td>
-                <td>{cell(room.noonCount, room.guestCount)}</td>
+                <td className={styles.mealCount}>{bn(room.nightCount)}</td>
+                <td className={styles.mealCount}>{bn(room.noonCount)}</td>
+                <td className={styles.guestCell}>
+                  {room.guestFullCount > 0 ? bn(room.guestFullCount) : "—"}
+                </td>
+                <td className={styles.guestCell}>
+                  {room.guestHalfCount > 0 ? bn(room.guestHalfCount) : "—"}
+                </td>
               </tr>
             ))}
+            <tr className={styles.filler} aria-hidden>
+              <td />
+              <td />
+              <td />
+              <td className={styles.guestCell} />
+              <td className={styles.guestCell} />
+            </tr>
             <tr className={styles.grandTotal}>
               <td>মোট</td>
-              <td>
-                {cell(
-                  totals.nightCount,
-                  totals.guestFullCount + totals.guestHalfCount,
-                )}
-              </td>
-              <td>
-                {cell(
-                  totals.noonCount,
-                  totals.guestFullCount + totals.guestHalfCount,
-                )}
-              </td>
+              <td className={styles.mealCount}>{bn(totals.nightCount)}</td>
+              <td className={styles.mealCount}>{bn(totals.noonCount)}</td>
+              <td className={styles.guestCell}>{bn(grandGuestFull)}</td>
+              <td className={styles.guestCell}>{bn(grandGuestHalf)}</td>
             </tr>
           </tbody>
         </table>

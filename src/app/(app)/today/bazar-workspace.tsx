@@ -414,12 +414,16 @@ export function BazarWorkspace({
             targetId="bazar-slip"
             fileName={`bazar-slip-${date}.pdf`}
             label="Download PDF slip"
+            format="a4"
+            orientation="portrait"
             size="lg"
           />
           <PdfButton
             targetId="bazar-slip"
             fileName={`bazar-slip-${date}.pdf`}
             label="Share slip"
+            format="a4"
+            orientation="portrait"
             mode="share"
             variant="outline"
             size="lg"

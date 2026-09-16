@@ -1,23 +1,23 @@
 /* Plain CSS with literal colours (no theme colour functions) so the slip
    rasterises identically for the PDF and prints cleanly.
 
-   Layout mirrors the mess's paper form: hostel header, date + bazarkari room
-   row, then a two-column body with the room grid on the left and the money
-   box on the right. */
+   A4 portrait, laid out like the mess's paper form: hostel header, date +
+   bazarkari room row, then the room grid on the left and the money box on the
+   right. Sized for a full house of rooms (26+) with readable figures. */
 
 .slip {
-  /* A5 portrait proportions (1 : 1.414), matching the mess's paper form, so the
-     rasterised image fills the PDF page exactly instead of letterboxing. */
-  width: 600px;
-  min-height: 848px;
+  /* A4 portrait proportions (1 : 1.414) so the rasterised image fills the PDF
+     page exactly instead of letterboxing. */
+  width: 794px;
+  min-height: 1123px;
   display: flex;
   flex-direction: column;
   background: #ffffff;
   color: #111111;
-  padding: 22px 24px 18px;
+  padding: 24px 26px 20px;
   font-family: "Noto Sans Bengali", "Nirmala UI", "Bangla MN", "Kohinoor Bangla",
     "Vrinda", system-ui, sans-serif;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.3;
   border: 2px solid #111111;
   box-sizing: border-box;
@@ -25,25 +25,25 @@
 
 .header {
   text-align: center;
-  padding-bottom: 7px;
+  padding-bottom: 9px;
   border-bottom: 2px solid #111111;
 }
 
 .hostel {
-  font-size: 21px;
+  font-size: 25px;
   font-weight: 700;
   letter-spacing: 0.2px;
 }
 
 .address {
-  font-size: 11px;
+  font-size: 13px;
   color: #333333;
   margin-top: 2px;
 }
 
 .title {
-  margin-top: 7px;
-  font-size: 17px;
+  margin-top: 9px;
+  font-size: 21px;
   font-weight: 700;
   letter-spacing: 1.2px;
 }
@@ -54,8 +54,8 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 14px;
-  padding: 7px 2px;
-  font-size: 12.5px;
+  padding: 9px 2px;
+  font-size: 14.5px;
   border-bottom: 1px solid #111111;
 }
 
@@ -72,8 +72,8 @@
 .body {
   display: flex;
   align-items: stretch;
-  gap: 14px;
-  margin-top: 12px;
+  gap: 16px;
+  margin-top: 14px;
   flex: 1 1 auto;
 }
 
@@ -81,7 +81,7 @@
   flex: 1 1 auto;
   min-width: 0;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 /* Data rows keep their natural height; a single filler row absorbs whatever
@@ -99,7 +99,7 @@
 .roomTable th,
 .roomTable td {
   border: 1px solid #111111;
-  padding: 3px 4px;
+  padding: 4px 5px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -107,42 +107,64 @@
 .roomTable th {
   background: #ececec;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 13.5px;
+  line-height: 1.15;
 }
 
 .roomTable td.roomNo {
   font-weight: 700;
+  font-size: 15px;
   background: #fafafa;
 }
 
-.guestSuffix {
+/* Plain meal counts — the figures the shopper actually cooks from. */
+.roomTable td.mealCount {
+  font-size: 17px;
   font-weight: 700;
+}
+
+/* Guests get their own columns rather than being folded into the meal count,
+   with a heavier rule grouping them away from the member figures. */
+.roomTable th.guestCol,
+.roomTable td.guestCell {
+  border-left: 2px solid #111111;
+  background: #fbfbfb;
+}
+
+.roomTable td.guestCell {
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .roomTable tr.grandTotal td {
   font-weight: 700;
   background: #ececec;
   border-top: 2px solid #111111;
+  font-size: 15px;
+}
+
+.roomTable tr.grandTotal td.mealCount {
+  font-size: 17px;
 }
 
 .moneyCol {
-  flex: 0 0 262px;
+  flex: 0 0 296px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .moneyBox,
 .cashBox {
   border: 1px solid #111111;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .moneyRow {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 3.5px 8px;
+  padding: 5px 10px;
   border-bottom: 1px solid #111111;
 }
 
@@ -157,15 +179,17 @@
 .moneyFormula {
   flex: 0 0 auto;
   color: #333333;
+  font-size: 13px;
   white-space: nowrap;
 }
 
 .moneyAmount {
   flex: 0 0 auto;
-  min-width: 62px;
+  min-width: 74px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -178,13 +202,9 @@
 .moneyTotal {
   background: #ececec;
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 15px;
   border-top: 2px solid #111111;
   border-bottom: 2px solid #111111;
-}
-
-.moneyTotal .moneyAmount {
-  font-weight: 700;
 }
 
 /* Handwritten-in-red feel, matching the paper form's red pen corrections. */
@@ -200,10 +220,10 @@
 }
 
 .footerNote {
-  margin-top: 10px;
-  padding-top: 7px;
+  margin-top: 12px;
+  padding-top: 9px;
   border-top: 1px solid #111111;
-  font-size: 10px;
+  font-size: 11.5px;
   color: #555555;
   text-align: center;
 }

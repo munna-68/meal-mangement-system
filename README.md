@@ -144,7 +144,7 @@ letterboxes.
 
 | Sheet | Page | Shape |
 | --- | --- | --- |
-| Daily bazar slip | A5 portrait | Room grid (রাত / দুপুর) left, money box right — matches the paper form. No menu section. |
+| Daily bazar slip | A4 portrait | Room grid left (`ক্রম নং`, `রাত`, `দুপুর`, `গেস্ট ফুল`, `গেস্ট হাফ`), money box right — matches the paper form, sized to hold the full room list on one page. No menu section. |
 | Monthly settlement ledger | A4 landscape | One row per member, mirroring the existing Excel columns |
 | Monthly meal register | A4 landscape | One row per member, one column per day, coded **F** = full, **D** = half-day, **N** = half-night, **·** = off |
 
