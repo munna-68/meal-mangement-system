@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
 import { computeDayTotals, rateCardFor } from "@/lib/calc";
+import { buildDutyUnits, orderUnitsFrom } from "@/lib/roster";
 import {
   addDays,
   isValidDateKey,
@@ -89,35 +90,6 @@ const rosterSchema = z.object({
 });
 
 /**
- * Splits the rooms into the units that take one day each. Rooms with two or
- * more beds go alone; single-bed rooms are paired up, because one person alone
- * cannot cover a day's shopping.
- */
-export function buildDutyUnits(
-  rooms: { id: string; capacity: number }[],
-): string[][] {
-  const units: string[][] = [];
-  let unpairedSingles: string[] = [];
-
-  for (const room of rooms) {
-    if (room.capacity <= 1) {
-      unpairedSingles.push(room.id);
-      if (unpairedSingles.length === 2) {
-        units.push(unpairedSingles);
-        unpairedSingles = [];
-      }
-    } else {
-      units.push([room.id]);
-    }
-  }
-
-  // An odd single left at the end still has to take a turn; it goes alone.
-  if (unpairedSingles.length > 0) units.push(unpairedSingles);
-
-  return units;
-}
-
-/**
  * Fills the rest of the month with the duty sequence, starting from a chosen
  * room and date. Everything after the start follows the room order and wraps
  * around, so re-running with a different start date simply rewrites the run.
@@ -136,7 +108,7 @@ export async function autoAssignRoster(
 
   try {
     const roomRows = await db
-      .select({ id: rooms.id, capacity: rooms.capacity, number: rooms.number })
+      .select({ id: rooms.id, capacity: rooms.capacity })
       .from(rooms)
       .orderBy(rooms.number);
 
@@ -145,9 +117,8 @@ export async function autoAssignRoster(
     const units = buildDutyUnits(roomRows);
     if (units.length === 0) return fail("No rooms can take a duty.");
 
-    const startIndex = units.findIndex((unit) => unit.includes(startRoomId));
-    if (startIndex < 0) return fail("That room is not in the rotation.");
-    const ordered = [...units.slice(startIndex), ...units.slice(0, startIndex)];
+    const ordered = orderUnitsFrom(units, startRoomId);
+    if (!ordered) return fail("That room is not in the rotation.");
 
     const last = monthEnd(month);
     let cursor = startDate;

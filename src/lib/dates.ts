@@ -167,6 +167,16 @@ export function formatDisplay(key: DateKey): string {
   return `${d} ${EN_MONTHS[m - 1]} ${y}`;
 }
 
+/** Day-of-month and short weekday, for dense tables where space is tight. */
+export function dayParts(key: DateKey): { day: string; weekday: string } {
+  const [, , d] = parts(key);
+  const weekday = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    timeZone: "UTC",
+  }).format(toUTC(key));
+  return { day: String(d), weekday };
+}
+
 export function formatLongDisplay(key: DateKey): string {
   const [y, m, d] = parts(key);
   const weekday = new Intl.DateTimeFormat("en-GB", {

@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronLeftIcon, ChevronRightIcon, Wand2Icon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 
-import { cn } from "cn";
-
-import { DutyEditor } from "@/components/duty-editor";
+import { PdfButton } from "@/components/pdf-button";
+import { RosterSheet } from "@/components/roster-sheet";
 import { PageHeader, Stat } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,9 +18,17 @@ import {
   todayKey,
 } from "@/lib/dates";
 import { requireSession } from "@/server/auth";
-import { getBazarDutiesInRange, getRooms } from "@/server/queries";
+import { getBazarDutiesInRange, getRooms, getSettingsOrDefaults } from "@/server/queries";
+import { RosterBoard, type RosterDay } from "./roster-board";
 
 export const metadata: Metadata = { title: "Bazar Roster" };
+
+function roomTypeLabel(capacity: number): string {
+  if (capacity <= 1) return "single";
+  if (capacity === 2) return "double";
+  if (capacity === 3) return "triple";
+  return `${capacity} beds`;
+}
 
 export default async function RosterPage(props: PageProps<"/roster">) {
   await requireSession();
@@ -31,23 +38,27 @@ export default async function RosterPage(props: PageProps<"/roster">) {
   const month = rawMonth && isValidMonthKey(rawMonth) ? rawMonth : currentMonthKey();
   const today = todayKey();
 
-  const [rooms, duties] = await Promise.all([
+  const [rooms, duties, settings] = await Promise.all([
     getRooms(),
     getBazarDutiesInRange(monthStart(month), monthEnd(month)),
+    getSettingsOrDefaults(),
   ]);
 
   const dutyByDate = new Map(duties.map((duty) => [duty.date, duty]));
   const days = daysInMonth(month);
 
-  // Convenience only: the room that has gone longest without a turn.
-  const lastDutyIndex = new Map<string, number>();
-  for (const duty of duties) {
-    if (duty.roomIds.length !== 1) continue;
-    lastDutyIndex.set(duty.roomIds[0], days.indexOf(duty.date));
-  }
-  const suggestedRoom = rooms
-    .map((room) => ({ room, last: lastDutyIndex.get(room.id) ?? -1 }))
-    .sort((a, b) => a.last - b.last)[0]?.room;
+  const rosterDays: RosterDay[] = days.map((day) => {
+    const duty = dutyByDate.get(day);
+    return {
+      date: day,
+      label: formatDisplay(day),
+      isToday: day === today,
+      roomIds: duty?.roomIds ?? [],
+      roomNumbers: duty?.roomNumbers ?? [],
+      khalaDidShopping: duty?.khalaDidShopping ?? false,
+      note: duty?.note ?? null,
+    };
+  });
 
   const assignedDays = days.filter((day) => dutyByDate.has(day)).length;
   const khalaDays = duties.filter((duty) => duty.khalaDidShopping).length;
@@ -58,7 +69,7 @@ export default async function RosterPage(props: PageProps<"/roster">) {
         title="Bazar Duty Roster"
         description={formatMonthLongDisplay(month)}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="icon" asChild>
               <Link
                 href={`/roster?month=${addMonths(month, -1)}`}
@@ -75,6 +86,23 @@ export default async function RosterPage(props: PageProps<"/roster">) {
                 <ChevronRightIcon />
               </Link>
             </Button>
+            <PdfButton
+              targetId="roster-sheet"
+              fileName={`bazar-duty-${month}.pdf`}
+              label="Download duty list"
+              format="a4"
+              orientation="portrait"
+              variant="secondary"
+            />
+            <PdfButton
+              targetId="roster-sheet"
+              fileName={`bazar-duty-${month}.pdf`}
+              label="Share duty list"
+              format="a4"
+              orientation="portrait"
+              mode="share"
+              variant="outline"
+            />
           </div>
         }
       />
@@ -84,67 +112,45 @@ export default async function RosterPage(props: PageProps<"/roster">) {
         <Stat label="Khala shopping days" value={khalaDays} />
         <Stat label="Rooms in rotation" value={rooms.length} />
         <Stat
-          label="Suggested next"
-          value={suggestedRoom ? `Room ${suggestedRoom.number}` : "—"}
-          hint="longest without a turn"
+          label="Single rooms"
+          value={rooms.filter((room) => room.capacity <= 1).length}
+          hint="paired two-up per day"
         />
       </div>
 
-      <div className="mb-3 flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        <Wand2Icon className="mt-0.5 size-3.5 shrink-0" />
-        <p>
-          Assignments are manual — the suggestion is only a hint and nothing is
-          rotated automatically. You can fill in days ahead of time.
-        </p>
-      </div>
+      <RosterBoard
+        month={month}
+        days={rosterDays}
+        rooms={rooms.map((room) => ({
+          id: room.id,
+          number: room.number,
+          typeLabel: roomTypeLabel(room.capacity),
+        }))}
+      />
 
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="divide-y">
-          {days.map((day) => {
-            const duty = dutyByDate.get(day);
-            const isToday = day === today;
-            return (
-              <div
-                key={day}
-                className={cn(
-                  "flex flex-wrap items-center justify-between gap-2 px-3 py-2.5",
-                  isToday && "bg-primary/5",
-                )}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span
-                    className={cn(
-                      "w-24 shrink-0 text-sm tabular-nums",
-                      isToday ? "font-semibold" : "text-muted-foreground",
-                    )}
-                  >
-                    {formatDisplay(day)}
-                  </span>
-                  <span className="text-sm">
-                    {duty?.khalaDidShopping ? (
-                      <span className="font-medium">Khala did the shopping</span>
-                    ) : duty && duty.roomNumbers.length > 0 ? (
-                      <span className="font-medium">
-                        {duty.roomNumbers.map((room) => `Room ${room}`).join(" + ")}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">Not assigned</span>
-                    )}
-                  </span>
-                  {duty?.note ? (
-                    <span className="text-xs text-muted-foreground">— {duty.note}</span>
-                  ) : null}
-                </div>
-                <DutyEditor
-                  date={day}
-                  rooms={rooms.map((room) => ({ id: room.id, number: room.number }))}
-                  selectedRoomIds={duty?.roomIds ?? []}
-                  khalaDidShopping={duty?.khalaDidShopping ?? false}
-                  note={duty?.note ?? null}
-                />
-              </div>
-            );
-          })}
+      {/* Off-screen copy used to build the PDF. */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          left: -10000,
+          top: 0,
+          pointerEvents: "none",
+          zIndex: -1,
+        }}
+      >
+        <div id="roster-sheet">
+          <RosterSheet
+            hostelName={settings.hostelName}
+            address={settings.address}
+            month={month}
+            rows={rosterDays.map((day) => ({
+              date: day.date,
+              roomNumbers: day.roomNumbers,
+              khalaDidShopping: day.khalaDidShopping,
+              note: day.note,
+            }))}
+          />
         </div>
       </div>
     </>

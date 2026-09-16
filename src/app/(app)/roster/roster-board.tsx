@@ -136,8 +136,6 @@ export function RosterBoard({
           {days.map((day) => {
             const isDragSource = dragDate === day.date;
             const isDropTarget = overDate === day.date && dragDate !== day.date;
-            const assigned =
-              day.khalaDidShopping || day.roomNumbers.length > 0;
 
             return (
               <div

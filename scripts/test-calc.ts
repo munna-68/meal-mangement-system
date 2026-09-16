@@ -26,6 +26,7 @@ import {
   type UtilityBillData,
   type DepositData,
 } from "../src/lib/calc";
+import { buildDutyUnits, orderUnitsFrom } from "../src/lib/roster";
 
 let passed = 0;
 const failures: string[] = [];
@@ -811,6 +812,58 @@ section("Monthly meal register");
   });
   check("days after today are not coded", midMonth.rows[0].cells.slice(20).every((c) => c.status === null), true);
   check("totals stop at today", byId("m1").fullCount > midMonth.rows.find((r) => r.memberId === "m1")!.fullCount, true);
+}
+
+// ---------------------------------------------------------------------------
+// Bazar duty rotation
+// ---------------------------------------------------------------------------
+
+section("Bazar duty rotation");
+{
+  const rooms = [
+    { id: "r101", capacity: 2 },
+    { id: "r102", capacity: 2 },
+    { id: "r103", capacity: 2 },
+    { id: "r104", capacity: 2 },
+    { id: "r105", capacity: 1 },
+    { id: "r106", capacity: 2 },
+    { id: "r108", capacity: 1 },
+  ];
+
+  const units = buildDutyUnits(rooms);
+  check("two single rooms pair into one day", units, [
+    ["r101"],
+    ["r102"],
+    ["r103"],
+    ["r104"],
+    ["r105", "r108"],
+    ["r106"],
+  ]);
+
+  check(
+    "starting from room 103 puts it first",
+    orderUnitsFrom(units, "r103"),
+    [["r103"], ["r104"], ["r105", "r108"], ["r106"], ["r101"], ["r102"]],
+  );
+  check(
+    "starting from a paired single pulls in its partner",
+    orderUnitsFrom(units, "r108"),
+    [["r105", "r108"], ["r106"], ["r101"], ["r102"], ["r103"], ["r104"]],
+  );
+  check("an unknown room is rejected", orderUnitsFrom(units, "nope"), null);
+
+  // Every unit covers a day, so the cycle length is the unit count, not rooms.
+  check("cycle length counts units not rooms", units.length, 6);
+
+  // An odd single left over still gets a turn rather than being dropped.
+  const oddSingles = buildDutyUnits([
+    { id: "a", capacity: 1 },
+    { id: "b", capacity: 1 },
+    { id: "c", capacity: 1 },
+  ]);
+  check("leftover single still takes a day", oddSingles, [["a", "b"], ["c"]]);
+
+  check("no rooms yields no units", buildDutyUnits([]), []);
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,9 @@ import { AlertTriangleIcon, ShieldCheckIcon } from "lucide-react";
 
 import { cn } from "cn";
 
+import { BalanceSheet } from "@/components/balance-sheet";
 import { PageHeader, SectionCard, Stat } from "@/components/page-header";
+import { PdfButton } from "@/components/pdf-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { computeRunningBalances } from "@/lib/calc";
@@ -73,6 +75,26 @@ export default async function BalancesPage() {
         description={`Live position for ${formatDisplay(result.periodStart)} → ${formatDisplay(
           result.periodEnd,
         )}${snapshot.lastClosedMonth ? ` · after closing ${snapshot.lastClosedMonth}` : ""}`}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <PdfButton
+              targetId="balance-sheet"
+              fileName={`balances-${today}.pdf`}
+              label="Download balances"
+              format="a4"
+              orientation="portrait"
+            />
+            <PdfButton
+              targetId="balance-sheet"
+              fileName={`balances-${today}.pdf`}
+              label="Share balances"
+              format="a4"
+              orientation="portrait"
+              mode="share"
+              variant="outline"
+            />
+          </div>
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -223,6 +245,38 @@ export default async function BalancesPage() {
         </Link>{" "}
         to lock these figures.
       </p>
+
+      {/* Off-screen copy used to build the PDF. */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          left: -10000,
+          top: 0,
+          pointerEvents: "none",
+          zIndex: -1,
+        }}
+      >
+        <div id="balance-sheet">
+          <BalanceSheet
+            hostelName={snapshot.settings.hostelName}
+            address={snapshot.settings.address}
+            periodStart={result.periodStart}
+            periodEnd={result.periodEnd}
+            generatedOn={today}
+            rows={activeRows.map((row) => ({
+              memberId: row.memberId,
+              roomNumber: row.roomNumber,
+              memberName: row.memberName,
+              openingBalance: row.openingBalance,
+              deposits: row.deposits,
+              cost: row.cost,
+              balance: row.balance,
+            }))}
+            summary={result.summary}
+          />
+        </div>
+      </div>
     </>
   );
 }

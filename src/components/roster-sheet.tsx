@@ -1,10 +1,14 @@
 import styles from "./roster-sheet.module.css";
 
-import { formatBengaliMonth, toBengaliDigits, type MonthKey } from "@/lib/dates";
+import {
+  dayParts,
+  formatBengaliMonth,
+  toBengaliDigits,
+  type MonthKey,
+} from "@/lib/dates";
 
 export interface RosterSheetRow {
   date: string;
-  label: string;
   roomNumbers: string[];
   khalaDidShopping: boolean;
   note: string | null;
@@ -48,23 +52,26 @@ export function RosterSheet({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.date}
-              className={row.khalaDidShopping ? styles.khala : undefined}
-            >
-              <td className={styles.date}>{bn(row.label.split(" ")[0])}</td>
-              <td className={styles.day}>{row.label.split(" ").slice(1).join(" ")}</td>
-              <td className={styles.rooms}>
-                {row.khalaDidShopping
-                  ? "খালা বাজার করেছে"
-                  : row.roomNumbers.length > 0
-                    ? row.roomNumbers.map((room) => `রুম ${bn(room)}`).join(" + ")
-                    : "—"}
-              </td>
-              <td className={styles.note}>{row.note ?? ""}</td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const { day, weekday } = dayParts(row.date);
+            return (
+              <tr
+                key={row.date}
+                className={row.khalaDidShopping ? styles.khala : undefined}
+              >
+                <td className={styles.date}>{bn(day)}</td>
+                <td className={styles.day}>{weekday}</td>
+                <td className={styles.rooms}>
+                  {row.khalaDidShopping
+                    ? "খালা বাজার করেছে"
+                    : row.roomNumbers.length > 0
+                      ? row.roomNumbers.map((room) => `রুম ${bn(room)}`).join(" + ")
+                      : "—"}
+                </td>
+                <td className={styles.note}>{row.note ?? ""}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
