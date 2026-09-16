@@ -3,17 +3,11 @@
 import { useState } from "react";
 import { TrashIcon } from "lucide-react";
 
+import { MemberPicker } from "@/components/member-picker";
 import { useAction } from "@/components/use-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { todayKey } from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
 import { createDeposit, deleteDeposit } from "@/server/actions/ledger";
@@ -63,18 +57,16 @@ export function DepositsClient({
         <div className="grid gap-3 p-4 lg:grid-cols-[1.4fr_1fr_1fr_1.6fr_auto] lg:items-end">
           <div className="flex flex-col gap-2">
             <Label htmlFor="deposit-member">Member</Label>
-            <Select value={memberId} onValueChange={setMemberId}>
-              <SelectTrigger id="deposit-member" className="w-full">
-                <SelectValue placeholder="Pick a member" />
-              </SelectTrigger>
-              <SelectContent>
-                {members.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.name} — Room {member.roomNumber}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MemberPicker
+              id="deposit-member"
+              members={members.map((member) => ({
+                id: member.id,
+                name: member.name,
+                roomNumber: member.roomNumber,
+              }))}
+              value={memberId}
+              onChange={setMemberId}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="deposit-date">Date</Label>

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
-import { DesktopNav, MobileNav } from "@/components/app-nav";
+import { DesktopNav, MobileMenuButton, MobileNav } from "@/components/app-nav";
 import { LogoutButton } from "@/components/logout-button";
 import { requireSession } from "@/server/auth";
 import { getSettingsOrDefaults } from "@/server/queries";
@@ -30,6 +30,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 Ramadan
               </span>
             ) : null}
+            <MobileMenuButton />
             <LogoutButton />
           </div>
         </div>

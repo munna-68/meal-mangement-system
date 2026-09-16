@@ -93,7 +93,7 @@ and `npm test` covers the rules with hand-computed expected values.
 | Rates are looked up by the date in force — never hardcoded | `rateCardFor` |
 | Status is sticky: a change applies forward until the next change | `resolveStatusTimeline` |
 | Daily budget = meals + guest meals + today's Extra − deduction | `computeDayTotals` |
-| Electricity and wifi split by **room capacity ÷ occupants** | `apportionUtilities` |
+| Electricity and wifi split **evenly per head**, with a configurable multiple for a solo member | `apportionUtilities` |
 | Khala is a flat per-head monthly fee (normal / solo rate) | `khalaAmountFor` |
 | Every Extra split evenly across members active that month | `extraPoolForRange` |
 | A member's bill never depends on what the shopper actually spent | `computeMonth` |
@@ -110,13 +110,33 @@ Guarantees worth knowing:
 - **Past rates are never overwritten.** Creating a rate version closes the
   previous one the day before.
 
+### "Solo" members
+
+A member is solo when they are the only occupant of a room with two or more beds,
+which is derived from the room type and how many people live there — it is never
+set by hand, so it can never disagree with reality. It affects two things:
+
+- **Khala** — they pay the solo rate instead of the normal rate (Rate Card).
+- **Utilities** — electricity and wifi are split evenly across every active
+  member, then a solo member's share is multiplied. The multiples are on Mess
+  Settings and default to **electricity ×2, wifi ×1**.
+
+Because the solo member pays more than one equal share, the amounts collected can
+exceed the bills. That is the mess's rule, and it is asserted in the tests rather
+than treated as a rounding error.
+
 ### The recurring daily costs
 
-The daily Extra (default ৳300) and the manager's fee (default ৳30) are
-materialised as real Extra Line Items for each day, so they both hit that day's
-shopping budget *and* accumulate into the month-end pool. They are generated
-idempotently and only up to today. Either can be turned off for a single day from
-Today's Bazar without affecting other days.
+The daily Extra (default ৳300) and the manager's fee (default ৳30) are charged
+**per bazar day, not per calendar day**. A day counts only once its bazar has been
+confirmed on Today's Bazar — so a month where the mess cooked on 25 of 30 days
+charges 25 × ৳300, not 30 × ৳300.
+
+Because of that, confirming is the action that registers money: until you confirm,
+those two amounts are shown as *pending* so the shopper's budget is right, but they
+are charged to nobody. Downloading or sharing the slip confirms the day first, so a
+slip can never show figures that were never registered. Either charge can still be
+turned off for a single day from Today's Bazar.
 
 ## Screens
 
@@ -135,18 +155,22 @@ Today's Bazar without affecting other days.
 
 ## PDF exports
 
-Three sheets, each rasterised from an on-page HTML layout at print quality. That
+Five sheets, each rasterised from an on-page HTML layout at print quality. That
 is deliberate: Latin-only PDF libraries do not shape Bengali conjuncts, so the
 text would come out broken. The layouts (`bazar-slip`, `ledger-sheet`,
-`meal-register-sheet`) use plain CSS with literal colours so the output is
-identical everywhere, and every sheet is sized to its page so nothing
-letterboxes.
+`meal-register-sheet`, `roster-sheet`, `balance-sheet`) use plain CSS with literal
+colours so the output is identical everywhere, and every sheet is sized to its
+page so nothing letterboxes.
+
+Portrait sheets are used wherever a member will read the result on a phone.
 
 | Sheet | Page | Shape |
 | --- | --- | --- |
 | Daily bazar slip | A4 portrait | Room grid left (`ক্রম নং`, `রাত`, `দুপুর`, `গেস্ট ফুল`, `গেস্ট হাফ`), money box right — matches the paper form, sized to hold the full room list on one page. No menu section. |
 | Monthly settlement ledger | A4 landscape | One row per member, mirroring the existing Excel columns |
 | Monthly meal register | A4 landscape | One row per member, one column per day, coded **F** = full, **D** = half-day, **N** = half-night, **·** = off |
+| Bazar duty list | A4 portrait | Every day of the month with who is shopping, for sharing into the group chat |
+| Balance sheet | A4 portrait | Running balance per member with a deficit/credit marker and the date it was produced |
 
 The meal register is the month-at-a-glance sheet: names down the left, days
 across the top in two half-month blocks, exactly like the mess's paper

@@ -44,12 +44,12 @@ export interface BillRecord {
   wifi: number | null;
 }
 
+// The recurring daily Extra and the manager's fee are generated from confirmed
+// bazar days, so they are not offered as manual categories here.
 const CATEGORIES: ExtraCategory[] = [
   "ONE_OFF",
   "FEAST",
   "OTHER",
-  "RECURRING_DAILY",
-  "MANAGER_FEE",
 ];
 
 export function ExtrasClient({
