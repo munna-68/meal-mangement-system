@@ -41,7 +41,9 @@ export interface RateCardView {
   dailyExtraAmount: number;
 }
 
-type RateValues = Omit<RateCardView, "id" | "effectiveTo">;
+type RateValues = Omit<RateCardView, "id" | "effectiveTo" | "label"> & {
+  label: string;
+};
 
 const FIELDS: { key: keyof Omit<RateValues, "label" | "effectiveFrom">; label: string; hint: string }[] = [
   { key: "fullMealRate", label: "Full meal rate", hint: "per member, both meals" },

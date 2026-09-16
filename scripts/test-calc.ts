@@ -567,6 +567,59 @@ section("Running balance after a closed month");
 }
 
 // ---------------------------------------------------------------------------
+// Future days are never billed
+// ---------------------------------------------------------------------------
+
+section("In-progress month stops at today");
+{
+  const midMonth = computeMonth({
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: MARCH_EXTRAS,
+    bills: BILLS,
+    rateCards: [RATE_CARD],
+    today: "2025-03-20",
+  });
+  const m1 = midMonth.perMember.get("m1")!;
+  check("only 20 of March's 31 days are billed", m1.fullMealCount, 20);
+  check("meal amount stops at today", m1.mealAmount, 20 * 60);
+  check("cutoff is clamped to today", midMonth.cutoff, "2025-03-20");
+
+  const finished = computeMonth({
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: MARCH_EXTRAS,
+    bills: BILLS,
+    rateCards: [RATE_CARD],
+    today: "2025-04-15",
+  });
+  check(
+    "a finished month still bills all 31 days",
+    finished.perMember.get("m1")!.fullMealCount,
+    31,
+  );
+
+  const depositLater = buildSettlementRows({
+    computation: midMonth,
+    members: MEMBERS,
+    rooms: ROOMS,
+    deposits: [{ memberId: "m1", date: "2025-03-25", amount: 900 }],
+    openingBalances: new Map(),
+  });
+  check(
+    "deposits dated after today are not counted yet",
+    depositLater.find((r) => r.memberId === "m1")!.newDeposits,
+    0,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 

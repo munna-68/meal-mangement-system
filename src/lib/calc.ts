@@ -740,9 +740,11 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
 
   const from = monthStart(month);
   const lastDay = monthEnd(month);
-  const cutoff = input.cutoff && compare(input.cutoff, lastDay) < 0
-    ? input.cutoff
-    : lastDay;
+  // Never bill a day that has not happened yet: an in-progress month is
+  // computed up to today, while a finished month runs to its last day.
+  const requested =
+    input.cutoff && compare(input.cutoff, lastDay) < 0 ? input.cutoff : lastDay;
+  const cutoff = compare(requested, today) < 0 ? requested : today;
 
   const activeMembers = members.filter((member) =>
     isMemberActiveInRange(member, from, cutoff, today),
@@ -908,7 +910,7 @@ export function buildSettlementRows(input: {
   const { computation, members, rooms, deposits, openingBalances } = input;
   const memberById = new Map(members.map((m) => [m.id, m]));
   const roomById = new Map(rooms.map((r) => [r.id, r]));
-  const { from, to } = computation;
+  const { from, cutoff } = computation;
 
   return computation.activeMemberIds
     .map((memberId) => {
@@ -920,7 +922,7 @@ export function buildSettlementRows(input: {
             (deposit) =>
               deposit.memberId === memberId &&
               isSameOrAfter(deposit.date, from) &&
-              isSameOrBefore(deposit.date, to),
+              isSameOrBefore(deposit.date, cutoff),
           )
           .map((deposit) => deposit.amount),
       );

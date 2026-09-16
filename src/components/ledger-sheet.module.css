@@ -1,0 +1,102 @@
+/* Landscape ledger sheet. Literal colours only, so it rasterises identically
+   into the PDF and prints cleanly. */
+
+.sheet {
+  width: 1100px;
+  background: #ffffff;
+  color: #111111;
+  padding: 24px 26px;
+  font-family: "Noto Sans Bengali", "Nirmala UI", "Bangla MN", "Kohinoor Bangla",
+    "Vrinda", system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+  border: 1px solid #111111;
+  box-sizing: border-box;
+}
+
+.header {
+  text-align: center;
+  border-bottom: 2px solid #111111;
+  padding-bottom: 8px;
+}
+
+.hostel {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.address {
+  font-size: 11px;
+  color: #333333;
+  margin-top: 2px;
+}
+
+.title {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.period {
+  margin-top: 6px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 11px;
+}
+
+.table th,
+.table td {
+  border: 1px solid #111111;
+  padding: 3px 5px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.table th {
+  background: #f1f1f1;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.name {
+  text-align: left !important;
+  font-weight: 600;
+}
+
+.numeric {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.negative {
+  color: #b00020;
+  font-weight: 700;
+}
+
+.totalRow td {
+  background: #f1f1f1;
+  font-weight: 700;
+  border-top: 2px solid #111111;
+}
+
+.footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #444444;
+}
+
+.legend {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #666666;
+}
