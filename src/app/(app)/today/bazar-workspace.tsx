@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/action-result";
 import type { DayTotals, ExtraCategory, RoomDayRow } from "@/lib/calc";
 import { EXTRA_CATEGORY_LABELS } from "@/lib/calc";
@@ -45,9 +44,6 @@ export interface BazarInitial {
   advanceGiven: number;
   actualExpense: number;
   changeReturned: number;
-  menuNight: string;
-  menuMorning: string;
-  menuNoon: string;
 }
 
 const initialActionState: ActionResult = { ok: true };
@@ -98,9 +94,6 @@ export function BazarWorkspace({
       ? null
       : initial.changeReturned,
   );
-  const [menuNight, setMenuNight] = useState(initial.menuNight);
-  const [menuMorning, setMenuMorning] = useState(initial.menuMorning);
-  const [menuNoon, setMenuNoon] = useState(initial.menuNoon);
 
   const budgetExtras = optimisticExtras.filter(
     (item) => item.date === date && item.showInDailyBudget && !item.voided,
@@ -413,50 +406,6 @@ export function BazarWorkspace({
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <header className="border-b bg-muted/40 px-3 py-2">
-            <h2 className="font-heading text-sm font-semibold">Menu notes</h2>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Only used on the printed slip — never in a calculation.
-            </p>
-          </header>
-          <div className="grid gap-3 p-3 sm:grid-cols-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="menuNight">Night</Label>
-              <Textarea
-                id="menuNight"
-                name="menuNight"
-                rows={2}
-                value={menuNight}
-                onChange={(event) => setMenuNight(event.target.value)}
-                placeholder="e.g. মাছ, ডাল, ভাত"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="menuMorning">Morning</Label>
-              <Textarea
-                id="menuMorning"
-                name="menuMorning"
-                rows={2}
-                value={menuMorning}
-                onChange={(event) => setMenuMorning(event.target.value)}
-                placeholder="e.g. খিচুড়ি"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="menuNoon">Noon</Label>
-              <Textarea
-                id="menuNoon"
-                name="menuNoon"
-                rows={2}
-                value={menuNoon}
-                onChange={(event) => setMenuNoon(event.target.value)}
-                placeholder="e.g. ভাত, মুরগি"
-              />
-            </div>
-          </div>
-        </section>
-
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" size="lg" disabled={saving || isFuture}>
             {saving ? "Saving…" : "Save bazar record"}
@@ -555,9 +504,6 @@ export function BazarWorkspace({
             advanceGiven={advance}
             actualExpense={expense}
             changeReturned={changeReturned}
-            menuNight={menuNight || null}
-            menuMorning={menuMorning || null}
-            menuNoon={menuNoon || null}
             ramadanMode={ramadanMode}
           />
         </div>

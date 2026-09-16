@@ -264,6 +264,10 @@ export interface DayTotals {
   rateCard: RateCardData | null;
   fullCount: number;
   halfCount: number;
+  /** Members eating the night meal (ফুল + হাফ-নাইট). */
+  nightCount: number;
+  /** Members eating the noon meal (ফুল + হাফ-ডে). */
+  noonCount: number;
   guestFullCount: number;
   guestHalfCount: number;
   sehriCount: number;
@@ -315,11 +319,23 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
 
   let fullCount = 0;
   let halfCount = 0;
+  let nightCount = 0;
+  let noonCount = 0;
   let sehriCount = 0;
   for (const member of activeMembers) {
     const { status, sehri } = statusOnDate(changes, member.id, date);
-    if (status === "FULL") fullCount += 1;
-    else if (status === "HALF_DAY" || status === "HALF_NIGHT") halfCount += 1;
+    if (status === "FULL") {
+      fullCount += 1;
+      // A full member eats both meal-times.
+      nightCount += 1;
+      noonCount += 1;
+    } else if (status === "HALF_DAY") {
+      halfCount += 1;
+      noonCount += 1;
+    } else if (status === "HALF_NIGHT") {
+      halfCount += 1;
+      nightCount += 1;
+    }
     if (ramadanMode && sehri) sehriCount += 1;
   }
 
@@ -352,6 +368,8 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
     rateCard,
     fullCount,
     halfCount,
+    nightCount,
+    noonCount,
     guestFullCount,
     guestHalfCount,
     sehriCount,
@@ -375,8 +393,13 @@ export interface RoomDayRow {
   memberNames: string[];
   fullCount: number;
   halfCount: number;
+  /** Members eating the night meal (ফুল + হাফ-নাইট). */
+  nightCount: number;
+  /** Members eating the noon meal (ফুল + হাফ-ডে). */
+  noonCount: number;
   guestFullCount: number;
   guestHalfCount: number;
+  guestCount: number;
   sehriCount: number;
   totalMeals: number;
 }
@@ -410,8 +433,11 @@ export function roomBreakdownForDay(input: {
       memberNames: [],
       fullCount: 0,
       halfCount: 0,
+      nightCount: 0,
+      noonCount: 0,
       guestFullCount: 0,
       guestHalfCount: 0,
+      guestCount: 0,
       sehriCount: 0,
       totalMeals: 0,
     });
@@ -423,8 +449,17 @@ export function roomBreakdownForDay(input: {
     if (!row) continue;
     row.memberNames.push(member.name);
     const { status, sehri } = statusOnDate(changes, member.id, date);
-    if (status === "FULL") row.fullCount += 1;
-    else if (status === "HALF_DAY" || status === "HALF_NIGHT") row.halfCount += 1;
+    if (status === "FULL") {
+      row.fullCount += 1;
+      row.nightCount += 1;
+      row.noonCount += 1;
+    } else if (status === "HALF_DAY") {
+      row.halfCount += 1;
+      row.noonCount += 1;
+    } else if (status === "HALF_NIGHT") {
+      row.halfCount += 1;
+      row.nightCount += 1;
+    }
     if (ramadanMode && sehri) row.sehriCount += 1;
   }
 
@@ -442,6 +477,7 @@ export function roomBreakdownForDay(input: {
   return [...rows.values()]
     .map((row) => ({
       ...row,
+      guestCount: row.guestFullCount + row.guestHalfCount,
       totalMeals:
         row.fullCount + row.halfCount + row.guestFullCount + row.guestHalfCount,
     }))

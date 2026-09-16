@@ -195,6 +195,15 @@ export function formatBengaliDate(key: DateKey): string {
   return `${toBengaliDigits(d)} ${BN_MONTHS[m - 1]} ${toBengaliDigits(y)}`;
 }
 
+/**
+ * Dotted numeric date in Bengali digits — "১৭.০৯.২০২৬". This is the format the
+ * mess writes in the তারিখ box on the paper slip.
+ */
+export function formatBengaliNumericDate(key: DateKey): string {
+  const [y, m, d] = parts(key);
+  return toBengaliDigits(`${d}.${m}.${y}`);
+}
+
 export function formatBengaliMonth(month: MonthKey): string {
   const [y, m] = month.split("-").map(Number);
   return `${BN_MONTHS[m - 1]} ${toBengaliDigits(y)}`;

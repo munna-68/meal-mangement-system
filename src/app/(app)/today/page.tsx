@@ -140,9 +140,6 @@ export default async function TodayPage(props: PageProps<"/today">) {
           changeReturned:
             record?.changeReturned ??
             (record ? (record.advanceGiven ?? 0) - (record.actualExpense ?? 0) : 0),
-          menuNight: record?.menuNight ?? "",
-          menuMorning: record?.menuMorning ?? "",
-          menuNoon: record?.menuNoon ?? "",
         }}
         ramadanMode={snapshot.settings.ramadanMode}
       />

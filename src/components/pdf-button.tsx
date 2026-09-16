@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button";
 
 type Mode = "download" | "share";
 
-async function buildPdfBlob(targetId: string): Promise<Blob> {
+type Format = "a5" | "a4";
+
+async function buildPdfBlob(
+  targetId: string,
+  format: Format,
+  orientation: "portrait" | "landscape",
+): Promise<Blob> {
   const node = document.getElementById(targetId);
   if (!node) throw new Error("The slip is not on the page yet.");
 
@@ -24,23 +30,24 @@ async function buildPdfBlob(targetId: string): Promise<Blob> {
   });
 
   const imageData = canvas.toDataURL("image/png");
-  const pdf = new jsPDF({ unit: "pt", format: "a5", orientation: "portrait" });
+  const pdf = new jsPDF({ unit: "pt", format, orientation });
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 18;
-  const imageWidth = pageWidth - margin * 2;
-  const imageHeight = (canvas.height * imageWidth) / canvas.width;
+  const usableWidth = pageWidth - margin * 2;
   const usableHeight = pageHeight - margin * 2;
 
-  let offset = 0;
-  let first = true;
-  while (first || offset < imageHeight) {
-    if (!first) pdf.addPage();
-    pdf.addImage(imageData, "PNG", margin, margin - offset, imageWidth, imageHeight);
-    offset += usableHeight;
-    first = false;
-  }
+  // Contain: scale the sheet so it fits inside the page in BOTH directions and
+  // stays centred. Fitting to width alone left the slip hugging the top of the
+  // page with dead space beneath it.
+  const scale = Math.min(usableWidth / canvas.width, usableHeight / canvas.height);
+  const imageWidth = canvas.width * scale;
+  const imageHeight = canvas.height * scale;
+  const x = margin + (usableWidth - imageWidth) / 2;
+  const y = margin + (usableHeight - imageHeight) / 2;
+
+  pdf.addImage(imageData, "PNG", x, y, imageWidth, imageHeight);
 
   return pdf.output("blob");
 }
@@ -50,6 +57,8 @@ export function PdfButton({
   fileName,
   label = "PDF slip",
   mode = "download",
+  format = "a5",
+  orientation = "portrait",
   variant = "default",
   size = "sm",
   className,
@@ -58,6 +67,8 @@ export function PdfButton({
   fileName: string;
   label?: string;
   mode?: Mode;
+  format?: Format;
+  orientation?: "portrait" | "landscape";
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "sm" | "default" | "lg";
   className?: string;
@@ -67,7 +78,7 @@ export function PdfButton({
   async function run() {
     setBusy(true);
     try {
-      const blob = await buildPdfBlob(targetId);
+      const blob = await buildPdfBlob(targetId, format, orientation);
 
       if (mode === "share") {
         const file = new File([blob], fileName, { type: "application/pdf" });

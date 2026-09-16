@@ -2,7 +2,7 @@ import styles from "./bazar-slip.module.css";
 
 import type { DayTotals, RoomDayRow } from "@/lib/calc";
 import {
-  formatBengaliDate,
+  formatBengaliNumericDate,
   toBengaliDigits,
   type DateKey,
 } from "@/lib/dates";
@@ -20,18 +20,16 @@ export interface BazarSlipProps {
   advanceGiven: number;
   actualExpense: number;
   changeReturned: number;
-  menuNight: string | null;
-  menuMorning: string | null;
-  menuNoon: string | null;
   ramadanMode: boolean;
 }
 
 const bn = toBengaliDigits;
 
-function Money({ amount }: { amount: number }) {
-  return <span className={styles.summaryAmount}>{formatTakaBengali(amount)}</span>;
-}
-
+/**
+ * The daily bazar slip, laid out to match the mess's paper form: the room grid
+ * on the left (রাত / দুপুর per room, guests noted as "২+১") and the money box on
+ * the right. There is deliberately no menu section.
+ */
 export function BazarSlip({
   hostelName,
   address,
@@ -44,9 +42,6 @@ export function BazarSlip({
   advanceGiven,
   actualExpense,
   changeReturned,
-  menuNight,
-  menuMorning,
-  menuNoon,
   ramadanMode,
 }: BazarSlipProps) {
   const dutyLabel =
@@ -55,6 +50,19 @@ export function BazarSlip({
       : "নির্ধারিত হয়নি";
 
   const showSehri = ramadanMode && totals.sehriCount > 0;
+  const rate = totals.rateCard;
+
+  // Guests eat with their host, so the paper form notes them inside the same
+  // রাত / দুপুর cell as "base+guests" rather than in a column of their own.
+  const cell = (base: number, guests: number) =>
+    guests > 0 ? (
+      <>
+        {bn(base)}
+        <span className={styles.guestSuffix}>+{bn(guests)}</span>
+      </>
+    ) : (
+      bn(base)
+    );
 
   return (
     <div className={styles.slip} lang="bn">
@@ -66,152 +74,165 @@ export function BazarSlip({
 
       <div className={styles.metaRow}>
         <span>
-          তারিখ: <span className={styles.metaStrong}>{formatBengaliDate(date)}</span>
+          তারিখ: <span className={styles.metaStrong}>{formatBengaliNumericDate(date)}</span>
         </span>
         <span>
-          বাজারদার: <span className={styles.metaStrong}>{dutyLabel}</span>
+          বাজারকারী রুম নং:{" "}
+          <span className={styles.metaStrong}>{dutyLabel}</span>
         </span>
       </div>
+
+      <div className={styles.body}>
+        <table className={styles.roomTable}>
+          <thead>
+            <tr>
+              <th>ক্রম নং</th>
+              <th>রাত</th>
+              <th>দুপুর</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rooms.map((room) => (
+              <tr key={room.roomId}>
+                <td className={styles.roomNo}>{bn(room.roomNumber)}</td>
+                <td>{cell(room.nightCount, room.guestCount)}</td>
+                <td>{cell(room.noonCount, room.guestCount)}</td>
+              </tr>
+            ))}
+            <tr className={styles.grandTotal}>
+              <td>মোট</td>
+              <td>
+                {cell(
+                  totals.nightCount,
+                  totals.guestFullCount + totals.guestHalfCount,
+                )}
+              </td>
+              <td>
+                {cell(
+                  totals.noonCount,
+                  totals.guestFullCount + totals.guestHalfCount,
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div className={styles.moneyCol}>
+          <div className={styles.moneyBox}>
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>ফুল মিল</span>
+              <span className={styles.moneyFormula}>
+                {bn(totals.fullCount)} × {bn(rate?.fullMealRate ?? 0)} =
+              </span>
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(totals.fullAmount)}
+              </span>
+            </div>
+
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>হাফ মিল</span>
+              <span className={styles.moneyFormula}>
+                {bn(totals.halfCount)} × {bn(rate?.halfMealRate ?? 0)} =
+              </span>
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(totals.halfAmount)}
+              </span>
+            </div>
+
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>গেস্ট ফুল মিল</span>
+              <span className={styles.moneyFormula}>
+                {bn(totals.guestFullCount)} × {bn(rate?.guestFullRate ?? 0)} =
+              </span>
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(totals.guestFullAmount)}
+              </span>
+            </div>
+
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>গেস্ট হাফ</span>
+              <span className={styles.moneyFormula}>
+                {bn(totals.guestHalfCount)} × {bn(rate?.guestHalfRate ?? 0)} =
+              </span>
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(totals.guestHalfAmount)}
+              </span>
+            </div>
+
+            {showSehri ? (
+              <div className={styles.moneyRow}>
+                <span className={styles.moneyLabel}>সেহরি</span>
+                <span className={styles.moneyFormula}>
+                  {bn(totals.sehriCount)} × {bn(rate?.sehriRate ?? 0)} =
+                </span>
+                <span className={styles.moneyAmount}>
+                  {formatTakaBengali(totals.sehriAmount)}
+                </span>
+              </div>
+            ) : null}
+
+            <div className={styles.moneyDivider} />
+
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>অতিরিক্ত</span>
+              <span className={styles.moneyFormula} />
+              <span className={styles.moneyAmount}>
+                +{formatTakaBengali(totals.extraAmount)}
+              </span>
+            </div>
+
+            {totals.deductionAmount > 0 ? (
+              <div className={`${styles.moneyRow} ${styles.deductionRow}`}>
+                <span className={styles.moneyLabel}>
+                  বাদ
+                  {deductionReason ? ` — ${deductionReason}` : ""}
+                </span>
+                <span className={styles.moneyFormula} />
+                <span className={styles.moneyAmount}>
+                  −{formatTakaBengali(totals.deductionAmount)}
+                </span>
+              </div>
+            ) : null}
+
+            <div className={`${styles.moneyRow} ${styles.moneyTotal}`}>
+              <span className={styles.moneyLabel}>মোট টাকা =</span>
+              <span className={styles.moneyFormula} />
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(totals.totalBudget)}
+              </span>
+            </div>
+          </div>
+
+          <div className={styles.cashBox}>
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>বাজার খরচ</span>
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(actualExpense)}
+              </span>
+            </div>
+
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>প্রদত্ত টাকা</span>
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(advanceGiven)}
+              </span>
+            </div>
+
+            <div className={styles.moneyRow}>
+              <span className={styles.moneyLabel}>ফেরত টাকা</span>
+              <span className={styles.moneyAmount}>
+                {formatTakaBengali(changeReturned)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {khalaDidShopping ? (
-        <div className={styles.metaRow}>
-          <span className={styles.deductionReason}>খালা বাজার করেছে</span>
+        <div className={styles.footerNote}>
+          <span className={styles.khalaNote}>খালা বাজার করেছে।</span>
         </div>
       ) : null}
-
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>রুম</th>
-            <th>ফুল</th>
-            <th>হাফ</th>
-            <th>গেস্ট</th>
-            {showSehri ? <th>সেহরি</th> : null}
-            <th>মোট</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rooms.map((room) => (
-            <tr key={room.roomId}>
-              <td className={styles.room}>{bn(room.roomNumber)}</td>
-              <td>{bn(room.fullCount)}</td>
-              <td>{bn(room.halfCount)}</td>
-              <td>{bn(room.guestFullCount + room.guestHalfCount)}</td>
-              {showSehri ? <td>{bn(room.sehriCount)}</td> : null}
-              <td>{bn(room.totalMeals)}</td>
-            </tr>
-          ))}
-          <tr>
-            <td className={styles.room}>সর্বমোট</td>
-            <td>{bn(totals.fullCount)}</td>
-            <td>{bn(totals.halfCount)}</td>
-            <td>{bn(totals.guestFullCount + totals.guestHalfCount)}</td>
-            {showSehri ? <td>{bn(totals.sehriCount)}</td> : null}
-            <td>
-              {bn(
-                totals.fullCount +
-                  totals.halfCount +
-                  totals.guestFullCount +
-                  totals.guestHalfCount,
-              )}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div className={styles.summary}>
-        <div className={styles.summaryRow}>
-          <span className={styles.summaryLabel}>ফুল মিল (Full Meal)</span>
-          <span className={styles.summaryLabel}>
-            {bn(totals.fullCount)} × {bn(totals.rateCard?.fullMealRate ?? 0)}
-          </span>
-          <Money amount={totals.fullAmount} />
-        </div>
-        <div className={styles.summaryRow}>
-          <span className={styles.summaryLabel}>হাফ মিল (Half Meal)</span>
-          <span className={styles.summaryLabel}>
-            {bn(totals.halfCount)} × {bn(totals.rateCard?.halfMealRate ?? 0)}
-          </span>
-          <Money amount={totals.halfAmount} />
-        </div>
-        <div className={styles.summaryRow}>
-          <span className={styles.summaryLabel}>গেস্ট ফুল মিল</span>
-          <span className={styles.summaryLabel}>
-            {bn(totals.guestFullCount)} × {bn(totals.rateCard?.guestFullRate ?? 0)}
-          </span>
-          <Money amount={totals.guestFullAmount} />
-        </div>
-        <div className={styles.summaryRow}>
-          <span className={styles.summaryLabel}>গেস্ট হাফ মিল</span>
-          <span className={styles.summaryLabel}>
-            {bn(totals.guestHalfCount)} × {bn(totals.rateCard?.guestHalfRate ?? 0)}
-          </span>
-          <Money amount={totals.guestHalfAmount} />
-        </div>
-        {showSehri ? (
-          <div className={styles.summaryRow}>
-            <span className={styles.summaryLabel}>সেহরি</span>
-            <span className={styles.summaryLabel}>
-              {bn(totals.sehriCount)} × {bn(totals.rateCard?.sehriRate ?? 0)}
-            </span>
-            <Money amount={totals.sehriAmount} />
-          </div>
-        ) : null}
-        <div className={styles.summaryRow}>
-          <span className={styles.summaryLabel}>এক্সট্রা (Extra)</span>
-          <span className={styles.summaryLabel} />
-          <Money amount={totals.extraAmount} />
-        </div>
-        {totals.deductionAmount > 0 ? (
-          <div className={`${styles.summaryRow} ${styles.deduction}`}>
-            <span className={styles.summaryLabel}>
-              বাদ (Deduction)
-              {deductionReason ? (
-                <span className={styles.deductionReason}> — {deductionReason}</span>
-              ) : null}
-            </span>
-            <span className={styles.summaryLabel} />
-            <span className={styles.summaryAmount}>
-              −{formatTakaBengali(totals.deductionAmount)}
-            </span>
-          </div>
-        ) : null}
-      </div>
-
-      <div className={styles.totalRow}>
-        <span>মোট টাকা (Total)</span>
-        <span>{formatTakaBengali(totals.totalBudget)}</span>
-      </div>
-
-      <div className={styles.cash}>
-        <div className={styles.cashRow}>
-          <span>বাজারের খরচ (Market Expense)</span>
-          <span>{formatTakaBengali(actualExpense)}</span>
-        </div>
-        <div className={styles.cashRow}>
-          <span>অগ্রিম দেওয়া (Given / Advance)</span>
-          <span>{formatTakaBengali(advanceGiven)}</span>
-        </div>
-        <div className={`${styles.cashRow} ${styles.cashStrong}`}>
-          <span>ফেরত (Returned)</span>
-          <span>{formatTakaBengali(changeReturned)}</span>
-        </div>
-      </div>
-
-      <div className={styles.menu}>
-        <div className={styles.menuTitle}>মেনু (Menu)</div>
-        <div className={styles.menuLine}>
-          <span className={styles.menuLabel}>রাত</span>
-          <span className={styles.menuValue}>{menuNight ?? ""}</span>
-        </div>
-        <div className={styles.menuLine}>
-          <span className={styles.menuLabel}>সকাল</span>
-          <span className={styles.menuValue}>{menuMorning ?? ""}</span>
-        </div>
-        <div className={styles.menuLine}>
-          <span className={styles.menuLabel}>দুপুর</span>
-          <span className={styles.menuValue}>{menuNoon ?? ""}</span>
-        </div>
-      </div>
 
       <div className={styles.footerNote}>
         বাজেট নির্ধারিত রেট অনুযায়ী — প্রকৃত খরচ আলাদাভাবে হিসাব করা হয়।

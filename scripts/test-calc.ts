@@ -15,6 +15,7 @@ import {
   occupancyForRange,
   rateCardFor,
   resolveStatusTimeline,
+  roomBreakdownForDay,
   type ExtraItemData,
   type MemberData,
   type RateCardData,
@@ -617,6 +618,59 @@ section("In-progress month stops at today");
     depositLater.find((r) => r.memberId === "m1")!.newDeposits,
     0,
   );
+}
+
+// ---------------------------------------------------------------------------
+// রাত / দুপুর columns on the paper slip
+// ---------------------------------------------------------------------------
+
+section("Night and noon meal-times (paper slip columns)");
+{
+  // The paper form tracks the two meal-times separately: রাত (night) and
+  // দুপুর (noon). A Full member eats both; each Half flavour eats exactly one.
+  const totals = computeDayTotals({
+    date: "2025-03-05",
+    members: MEMBERS,
+    changes: [
+      { memberId: "m1", date: "2025-03-01", status: "FULL", sehri: false },
+      { memberId: "m2", date: "2025-03-01", status: "HALF_DAY", sehri: false },
+      { memberId: "m3", date: "2025-03-01", status: "HALF_NIGHT", sehri: false },
+      { memberId: "m4", date: "2025-03-01", status: "OFF", sehri: false },
+    ],
+    guestMeals: [],
+    extras: [],
+    rateCard: RATE_CARD,
+  });
+
+  check("night = full + half-night", totals.nightCount, 2);
+  check("noon = full + half-day", totals.noonCount, 2);
+  check("the two columns add back to full + half", totals.nightCount + totals.noonCount, 4);
+  check("an off member eats neither meal", totals.nightCount > totals.fullCount, true);
+
+  const rooms = roomBreakdownForDay({
+    date: "2025-03-05",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: [
+      { memberId: "m1", date: "2025-03-01", status: "FULL", sehri: false },
+      { memberId: "m2", date: "2025-03-01", status: "HALF_DAY", sehri: false },
+      { memberId: "m3", date: "2025-03-01", status: "HALF_NIGHT", sehri: false },
+      { memberId: "m4", date: "2025-03-01", status: "OFF", sehri: false },
+    ],
+    guestMeals: [{ memberId: "m1", date: "2025-03-05", type: "GUEST_FULL", count: 2 }],
+  });
+
+  const roomA = rooms.find((r) => r.roomNumber === "101")!;
+  check("room A night (m1 full)", roomA.nightCount, 1);
+  check("room A noon (m1 full + m2 half-day)", roomA.noonCount, 2);
+  check("room A guest count", roomA.guestCount, 2);
+
+  const roomB = rooms.find((r) => r.roomNumber === "102")!;
+  check("room B night (m3 half-night)", roomB.nightCount, 1);
+  check("room B noon", roomB.noonCount, 0);
+
+  const roomC = rooms.find((r) => r.roomNumber === "205")!;
+  check("room C is off all day", roomC.nightCount + roomC.noonCount, 0);
 }
 
 // ---------------------------------------------------------------------------

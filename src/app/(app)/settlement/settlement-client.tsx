@@ -86,11 +86,15 @@ export function SettlementClient({
             targetId="ledger-sheet"
             fileName={`settlement-${month}.pdf`}
             label="Download ledger"
+            format="a4"
+            orientation="landscape"
           />
           <PdfButton
             targetId="ledger-sheet"
             fileName={`settlement-${month}.pdf`}
             label="Share"
+            format="a4"
+            orientation="landscape"
             mode="share"
             variant="outline"
           />
