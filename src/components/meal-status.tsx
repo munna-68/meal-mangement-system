@@ -18,6 +18,7 @@ export const MEAL_STATUS_META: Record<
     Icon: LucideIcon;
     solid: string;
     outline: string;
+    text: string;
   }
 > = {
   FULL: {
@@ -27,6 +28,7 @@ export const MEAL_STATUS_META: Record<
     Icon: Utensils,
     solid: "bg-emerald-600 text-white",
     outline: "border-emerald-600 text-emerald-700 bg-emerald-50",
+    text: "text-emerald-600",
   },
   HALF_DAY: {
     label: "Half-Day",
@@ -35,6 +37,7 @@ export const MEAL_STATUS_META: Record<
     Icon: Sun,
     solid: "bg-amber-500 text-white",
     outline: "border-amber-500 text-amber-700 bg-amber-50",
+    text: "text-amber-600",
   },
   HALF_NIGHT: {
     label: "Half-Night",
@@ -43,6 +46,7 @@ export const MEAL_STATUS_META: Record<
     Icon: Moon,
     solid: "bg-indigo-600 text-white",
     outline: "border-indigo-600 text-indigo-700 bg-indigo-50",
+    text: "text-indigo-600",
   },
   OFF: {
     label: "Off",
@@ -51,6 +55,7 @@ export const MEAL_STATUS_META: Record<
     Icon: Ban,
     solid: "bg-muted text-muted-foreground",
     outline: "border-border text-muted-foreground bg-muted/50",
+    text: "text-muted-foreground",
   },
 };
 

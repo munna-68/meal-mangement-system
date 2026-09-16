@@ -26,7 +26,7 @@ export async function requireSession(): Promise<void> {
 }
 
 export async function signIn(pin: string): Promise<boolean> {
-  if (!(await validatePin(pin))) return false;
+  if (!(await isValidPin(pin))) return false;
 
   const requestHeaders = await headers();
   const forwardedProto = requestHeaders.get("x-forwarded-proto");
