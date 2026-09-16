@@ -26,14 +26,14 @@ npm run db:seed
 npm run dev
 ```
 
-Open http://localhost:3000 and enter the PIN from `ADMIN_PIN` (default `1234`).
+Open http://localhost:3000 and enter the Manager PIN from `ADMIN_PIN` (default `admin`).
 
 ### Environment
 
 | Variable         | Purpose                                                         |
 | ---------------- | --------------------------------------------------------------- |
 | `DATABASE_URL`   | Postgres connection string. Neon's pooled string in production.   |
-| `ADMIN_PIN`      | The single shared PIN that protects the app.                      |
+| `ADMIN_PIN`      | The single shared Manager PIN that protects the app. Any string.  |
 | `SESSION_SECRET` | Signs the session cookie. Use a long random string.               |
 
 Generate a secret with:
@@ -63,8 +63,16 @@ To start over: `npm run db:reset && npm run db:seed`.
 1. Create a Postgres database on Neon (or Vercel Postgres) and copy the pooled
    connection string.
 2. Import the repo into Vercel.
-3. Set `DATABASE_URL`, `ADMIN_PIN` and `SESSION_SECRET` in the project's
-   environment variables.
+3. Set all three environment variables in the Vercel project settings
+   (`.env` is git-ignored, so Vercel does **not** inherit them — the app will
+   fail to sign you in without them):
+
+   | Variable         | Value for Vercel                                        |
+   | ---------------- | ------------------------------------------------------- |
+   | `DATABASE_URL`   | The Neon pooled connection string.                       |
+   | `ADMIN_PIN`      | Your Manager PIN. Starts as `admin` — change it.         |
+   | `SESSION_SECRET` | A fresh long random string (generate the command below). |
+
 4. Run the migrations once against that database:
 
    ```bash

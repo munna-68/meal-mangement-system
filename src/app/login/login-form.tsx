@@ -23,7 +23,6 @@ export function LoginForm({ next }: { next: string }) {
           id="pin"
           name="pin"
           type="password"
-          inputMode="numeric"
           autoComplete="current-password"
           autoFocus
           required

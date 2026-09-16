@@ -37,6 +37,9 @@ yarn-error.log*
 # local embedded postgres data
 /.pglite/
 
+# tooling scratch worktrees (a second checkout of this repo)
+/.kilo/
+
 # vercel
 .vercel
 

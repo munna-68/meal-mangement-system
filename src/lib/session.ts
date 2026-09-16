@@ -45,7 +45,7 @@ export async function verifySessionToken(
  * always between equal-length buffers and cannot leak the PIN's length.
  */
 export async function isValidPin(candidate: string): Promise<boolean> {
-  const expected = process.env.ADMIN_PIN;
+  const expected = process.env.ADMIN_PIN?.trim();
   if (!expected) {
     throw new Error("ADMIN_PIN is not set. Add it to .env");
   }

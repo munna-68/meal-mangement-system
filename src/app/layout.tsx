@@ -36,7 +36,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={cn(geistSans.variable, geistMono.variable, "h-full antialiased")}
     >
-      <body className="min-h-full bg-background">
+      {/*
+        Browser extensions (ColorZilla and friends) inject attributes such as
+        `cz-shortcut-listen` into <body> before React hydrates, which trips a
+        hydration mismatch that has nothing to do with this app.
+      */}
+      <body className="min-h-full bg-background" suppressHydrationWarning>
         {children}
         <Toaster position="top-center" richColors />
       </body>

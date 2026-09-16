@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Tooling scratch worktrees hold a second, stale copy of this repo.
+    ".kilo/**",
   ]),
 ]);
 

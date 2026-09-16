@@ -45,7 +45,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
           <CardContent>
             <LoginForm next={next} />
             <p className="mt-4 text-center text-xs text-muted-foreground">
-              One shared PIN protects the register. Members do not sign in.
+              One shared Manager PIN protects the register. Members do not sign in.
             </p>
           </CardContent>
         </Card>
