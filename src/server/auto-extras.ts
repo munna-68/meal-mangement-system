@@ -4,19 +4,26 @@ import { db } from "@/db";
 import { extraLineItems } from "@/db/schema";
 import { rateCardFor, type RateCardData } from "@/lib/calc";
 import {
-  daysInMonth,
+  addDays,
+  compare,
   monthEnd,
+  monthStart,
   todayKey,
   type DateKey,
   type MonthKey,
 } from "@/lib/dates";
-import { getRateCards } from "@/server/queries";
+import { getConfirmedBazarDates, getRateCards } from "@/server/queries";
 
 /**
  * The recurring daily Extra and the manager's daily fee are materialised as
- * real Extra Line Items so they roll into the month-end pool. Generation is
- * idempotent — the unique `sourceKey` means a day is never double-charged, and
- * a voided day is never resurrected.
+ * real Extra Line Items so they roll into the month-end pool.
+ *
+ * They are charged per *bazar day*, not per calendar day: a day only counts
+ * once its bazar has been confirmed. That way a month where the mess cooked on
+ * 25 of 30 days charges 25 x 300, not 30 x 300.
+ *
+ * Generation is idempotent — the unique `sourceKey` means a day is never
+ * double-charged, and a voided day is never resurrected.
  */
 
 export function dailyExtraSourceKey(date: DateKey): string {
@@ -71,52 +78,50 @@ async function insertAutoExtras(days: AutoExtraPlan[]): Promise<number> {
   return inserted.length;
 }
 
-export async function ensureAutoExtrasForMonth(month: MonthKey): Promise<void> {
-  const today = todayKey();
-  const end = monthEnd(month);
-  const lastDay = end < today ? end : today;
-  const days = daysInMonth(month).filter((day) => day <= lastDay);
-  if (days.length === 0) return;
-
-  const cards = await getRateCards();
-  await insertAutoExtras(days.map((day) => ({ day, card: rateCardFor(cards, day) })));
-}
-
-export async function ensureAutoExtrasForDate(date: DateKey): Promise<void> {
-  const today = todayKey();
-  if (date > today) return;
-  const cards = await getRateCards();
-  await insertAutoExtras([{ day: date, card: rateCardFor(cards, date) }]);
-}
-
+/** Materialises the recurring costs for every confirmed bazar day in a window. */
 export async function ensureAutoExtrasForRange(
   from: DateKey,
   to: DateKey,
 ): Promise<void> {
   const today = todayKey();
-  if (from > today) return;
-  const end = to < today ? to : today;
+  if (compare(from, today) > 0) return;
+  const end = compare(to, today) < 0 ? to : today;
+  if (compare(from, end) > 0) return;
+
+  const confirmed = await getConfirmedBazarDates(from, end);
+  if (confirmed.size === 0) return;
+
   const cards = await getRateCards();
-
-  const months = new Set<string>();
-  let cursor = from.slice(0, 7);
-  const lastMonth = end.slice(0, 7);
-  let guard = 0;
-  while (cursor <= lastMonth) {
-    months.add(cursor);
-    const [y, m] = cursor.split("-").map(Number);
-    cursor = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
-    if (++guard > 240) break;
-  }
-
   const plans: AutoExtraPlan[] = [];
-  for (const month of months) {
-    for (const day of daysInMonth(month)) {
-      if (day < from || day > end) continue;
-      plans.push({ day, card: rateCardFor(cards, day) });
+  let cursor = from;
+  let guard = 0;
+  while (compare(cursor, end) <= 0) {
+    if (confirmed.has(cursor)) {
+      plans.push({ day: cursor, card: rateCardFor(cards, cursor) });
     }
+    cursor = addDays(cursor, 1);
+    if (++guard > 2000) break;
   }
+
   await insertAutoExtras(plans);
+}
+
+export async function ensureAutoExtrasForMonth(month: MonthKey): Promise<void> {
+  const today = todayKey();
+  const end = monthEnd(month);
+  const lastDay = compare(end, today) < 0 ? end : today;
+  const start = monthStart(month);
+  if (compare(start, lastDay) > 0) return;
+  await ensureAutoExtrasForRange(start, lastDay);
+}
+
+/**
+ * Called after a bazar is confirmed. A day without a confirmed bazar earns no
+ * recurring charge at all, so this is a no-op until the record exists.
+ */
+export async function ensureAutoExtrasForDate(date: DateKey): Promise<void> {
+  if (compare(date, todayKey()) > 0) return;
+  await ensureAutoExtrasForRange(date, date);
 }
 
 /**

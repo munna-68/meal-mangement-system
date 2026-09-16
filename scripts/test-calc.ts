@@ -526,10 +526,10 @@ section("Settlement rows and balance carry-forward");
 
   check("m1 opening balance is 0", m1.openingBalance, 0);
   check("m1 new deposits", m1.newDeposits, 5000);
-  check("m1 closing = 5000 - 2835", m1.closingBalance, 2165);
+  check("m1 closing = 5000 - 2910", m1.closingBalance, 2090);
   check("deposit after the month is excluded", m3.newDeposits, 1000);
-  check("m3 closing = 1000 - 3235 (negative)", m3.closingBalance, -2235);
-  check("m2 closing = 0 - 2835", m2.closingBalance, -2835);
+  check("m3 closing = 1000 - 3260 (negative)", m3.closingBalance, -2260);
+  check("m2 closing = 0 - 2910", m2.closingBalance, -2910);
 
   const nextMonth = buildSettlementRows({
     computation,
@@ -541,7 +541,7 @@ section("Settlement rows and balance carry-forward");
   check(
     "closing balance becomes next month's opening",
     nextMonth.find((r) => r.memberId === "m1")!.openingBalance,
-    2165,
+    2090,
   );
 }
 
@@ -573,14 +573,18 @@ section("Running balance (month-to-date)");
   const m2 = result.rows.find((r) => r.memberId === "m2")!;
 
   check("period starts at the open month", result.periodStart, "2025-03-01");
-  check("20 full meals to date", m1.cost, 20 * 60 + 300 + 300 + 375);
-  check("balance = 5000 - 2175", m1.balance, 2825);
-  check("member with no deposit is in deficit", m2.balance, -2175);
+  // 20 days x 60 meals, plus 300 khala, 375 utilities (250 elec + 125 wifi), 375 extra.
+  check("20 full meals to date", m1.cost, 20 * 60 + 300 + 375 + 375);
+  check("balance = 5000 - 2250", m1.balance, 2750);
+  check("member with no deposit is in deficit", m2.balance, -2250);
   check("deficit count", result.summary.membersInDeficit, 3);
+  // m3 is solo in a 2-bed room: 400 khala and 625 utilities.
+  const m3 = result.rows.find((r) => r.memberId === "m3")!;
+  check("solo member's month-to-date cost", m3.cost, 20 * 60 + 400 + 625 + 375);
   check(
-    "mess-wide balance = 2825 - 2175 - 2575 - 2175",
+    "mess-wide balance = 2750 - 2250 - 2600 - 2250",
     result.summary.balance,
-    -4100,
+    -4350,
   );
 }
 

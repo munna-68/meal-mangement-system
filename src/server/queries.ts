@@ -386,12 +386,22 @@ export async function getBazarRecord(date: DateKey) {
   return rows[0] ?? null;
 }
 
-export async function getBazarRecordsInRange(from: DateKey, to: DateKey) {
-  return db
-    .select()
+/**
+ * Days with a confirmed bazar record. This is the mess's definition of a day
+ * the bazar actually ran, which is what the recurring daily Extra and the
+ * manager's fee are charged against.
+ */
+export async function getConfirmedBazarDates(
+  from: DateKey,
+  to: DateKey,
+): Promise<Set<DateKey>> {
+  const rows = await db
+    .select({ date: dailyBazarRecords.date })
     .from(dailyBazarRecords)
-    .where(and(gte(dailyBazarRecords.date, from), lte(dailyBazarRecords.date, to)))
-    .orderBy(asc(dailyBazarRecords.date));
+    .where(
+      and(gte(dailyBazarRecords.date, from), lte(dailyBazarRecords.date, to)),
+    );
+  return new Set(rows.map((row) => row.date));
 }
 
 // ---------------------------------------------------------------------------

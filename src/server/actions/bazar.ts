@@ -155,18 +155,6 @@ export async function saveBazarRecord(
   return ok("Bazar record saved");
 }
 
-export async function deleteBazarRecord(date: string): Promise<ActionResult> {
-  await requireSession();
-  if (!isValidDateKey(date)) return fail("Invalid date");
-  try {
-    await db.delete(dailyBazarRecords).where(eq(dailyBazarRecords.date, date));
-  } catch (error) {
-    return fail(firstIssue(error, "Could not delete the bazar record"));
-  }
-  refresh();
-  return ok();
-}
-
 export async function saveBazarRecordForm(
   _prev: ActionResult,
   formData: FormData,
