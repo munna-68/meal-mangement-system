@@ -829,20 +829,15 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     activeMemberCount: activeMembers.length,
   });
 
-  // Khala can change rate mid-month, so price it against the day's card too.
+  // Khala is a flat per-head amount for the month, not a daily charge, so it is
+  // priced once from the card in force at the start of the month.
+  const monthCard = rateCardFor(rateCards, from);
   const khalaByMember = new Map<string, number>();
   for (const member of activeMembers) {
-    let khala = 0;
-    for (const day of daysInMonth(month)) {
-      if (compare(day, cutoff) > 0) break;
-      if (!isMemberActiveOn(member, day, today)) continue;
-      khala += khalaAmountFor({
-        member,
-        occupancy,
-        rateCard: rateCardFor(rateCards, day),
-      });
-    }
-    khalaByMember.set(member.id, khala);
+    khalaByMember.set(
+      member.id,
+      khalaAmountFor({ member, occupancy, rateCard: monthCard }),
+    );
   }
 
   for (const member of activeMembers) {
