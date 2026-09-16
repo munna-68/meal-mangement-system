@@ -80,9 +80,20 @@
 .roomTable {
   flex: 1 1 auto;
   min-width: 0;
-  height: 100%;
   border-collapse: collapse;
   font-size: 12px;
+}
+
+/* Data rows keep their natural height; a single filler row absorbs whatever
+   vertical space is left, so the grid reads like the pre-printed register
+   instead of stretching each room row to an absurd height. */
+.roomTable tbody tr.roomRow,
+.roomTable tbody tr.grandTotal {
+  height: 1px;
+}
+
+.roomTable tbody tr.filler {
+  height: 100%;
 }
 
 .roomTable th,

@@ -90,13 +90,30 @@ export function SettlementClient({
             orientation="landscape"
           />
           <PdfButton
-            targetId="ledger-sheet"
-            fileName={`settlement-${month}.pdf`}
-            label="Share"
+            targetId="meal-register-sheet"
+            fileName={`meal-register-${month}.pdf`}
+            label="Meal register"
+            format="a4"
+            orientation="landscape"
+            variant="outline"
+          />
+          <PdfButton
+            targetId="meal-register-sheet"
+            fileName={`meal-register-${month}.pdf`}
+            label="Share register"
             format="a4"
             orientation="landscape"
             mode="share"
-            variant="outline"
+            variant="ghost"
+          />
+          <PdfButton
+            targetId="ledger-sheet"
+            fileName={`settlement-${month}.pdf`}
+            label="Share ledger"
+            format="a4"
+            orientation="landscape"
+            mode="share"
+            variant="ghost"
           />
           {closed ? (
             <Button

@@ -15,6 +15,7 @@ import {
   occupancyForRange,
   rateCardFor,
   resolveStatusTimeline,
+  mealRegisterForMonth,
   roomBreakdownForDay,
   type ExtraItemData,
   type MemberData,
@@ -671,6 +672,91 @@ section("Night and noon meal-times (paper slip columns)");
 
   const roomC = rooms.find((r) => r.roomNumber === "205")!;
   check("room C is off all day", roomC.nightCount + roomC.noonCount, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Monthly meal register (F / D / N codes)
+// ---------------------------------------------------------------------------
+
+section("Monthly meal register");
+{
+  const changes: StatusChangeData[] = [
+    { memberId: "m1", date: "2025-03-01", status: "FULL", sehri: false },
+    { memberId: "m2", date: "2025-03-01", status: "HALF_DAY", sehri: false },
+    { memberId: "m3", date: "2025-03-01", status: "HALF_NIGHT", sehri: false },
+    // m4 never gets a status, and m5 joins mid-month.
+  ];
+  const members = [
+    ...MEMBERS,
+    member("m5", "B", { joinDate: "2025-03-10" }),
+  ];
+
+  const register = mealRegisterForMonth({
+    month: "2025-03",
+    members,
+    rooms: ROOMS,
+    changes,
+    today: "2025-03-31",
+  });
+
+  check("one column per day of the month", register.days.length, 31);
+  check("one row per member active that month", register.rows.length, 5);
+
+  const byId = (id: string) => register.rows.find((r) => r.memberId === id)!;
+
+  // m1 is FULL all month: 31 full days, both codes counted.
+  check("m1 full days", byId("m1").fullCount, 31);
+  check("m1 half days", byId("m1").halfCount, 0);
+  // m2 is HALF_DAY (D) and m3 is HALF_NIGHT (N) — both land in the half column.
+  check("m2 half days (D)", byId("m2").halfCount, 31);
+  check("m3 half days (N)", byId("m3").halfCount, 31);
+  // m4 defaulted to OFF all month.
+  check("m4 full days", byId("m4").fullCount, 0);
+  check("m4 half days", byId("m4").halfCount, 0);
+  // m5 joined on the 10th, so the first nine days are blank, not "off".
+  const m5 = byId("m5");
+  check("m5 blank before joining", m5.cells.slice(0, 9).every((c) => c.status === null), true);
+  check("m5 counted from the join date", m5.cells[9].status, "OFF");
+  check("m5 total days present", m5.cells.filter((c) => c.status !== null).length, 22);
+
+  check(
+    "rows are ordered by room number",
+    register.rows.map((r) => r.roomNumber),
+    ["101", "101", "102", "102", "205"],
+  );
+
+  // The whole point of the register is to cross-check the money. Its per-member
+  // ফুল / হাফ totals must equal the settlement ledger's counts exactly.
+  const computation = computeMonth({
+    month: "2025-03",
+    members,
+    rooms: ROOMS,
+    changes,
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [RATE_CARD],
+    today: "2025-03-31",
+  });
+  const mismatches = register.rows.filter((row) => {
+    const cost = computation.perMember.get(row.memberId);
+    if (!cost) return false;
+    return (
+      cost.fullMealCount !== row.fullCount || cost.halfMealCount !== row.halfCount
+    );
+  });
+  check("register totals agree with the ledger", mismatches.length, 0);
+
+  // A day that has not happened yet must never be coded.
+  const midMonth = mealRegisterForMonth({
+    month: "2025-03",
+    members,
+    rooms: ROOMS,
+    changes,
+    today: "2025-03-20",
+  });
+  check("days after today are not coded", midMonth.rows[0].cells.slice(20).every((c) => c.status === null), true);
+  check("totals stop at today", byId("m1").fullCount > midMonth.rows.find((r) => r.memberId === "m1")!.fullCount, true);
 }
 
 // ---------------------------------------------------------------------------

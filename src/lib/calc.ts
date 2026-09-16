@@ -486,6 +486,92 @@ export function roomBreakdownForDay(input: {
     );
 }
 
+export interface RegisterCell {
+  day: DateKey;
+  /** null when the member was not living here yet, or the day is still ahead. */
+  status: MealStatus | null;
+}
+
+export interface RegisterRow {
+  memberId: string;
+  name: string;
+  roomNumber: string;
+  cells: RegisterCell[];
+  fullCount: number;
+  halfCount: number;
+}
+
+/**
+ * Month-at-a-glance register: one row per member, one column per day, with the
+ * F / D / N / off code for each. Days beyond the cutoff (or before the member
+ * joined) stay blank, and only counted days contribute to the totals — so the
+ * ফুল / হাফ figures here always agree with the settlement ledger.
+ */
+export function mealRegisterForMonth(input: {
+  month: MonthKey;
+  cutoff?: DateKey;
+  members: MemberData[];
+  rooms: RoomData[];
+  changes: StatusChangeData[];
+  today?: DateKey;
+}): { days: DateKey[]; cutoff: DateKey; rows: RegisterRow[] } {
+  const { month, members, rooms, changes, today = todayKey() } = input;
+
+  const days = daysInMonth(month);
+  const first = monthStart(month);
+  const last = monthEnd(month);
+  // Never show codes for days that have not happened yet.
+  const requested = input.cutoff ?? last;
+  const withinMonth = compare(requested, last) < 0 ? requested : last;
+  const cutoff = compare(withinMonth, today) < 0 ? withinMonth : today;
+
+  const activeMembers = members.filter((member) =>
+    isMemberActiveInRange(member, first, cutoff),
+  );
+  const timeline = resolveStatusTimeline(
+    changes,
+    activeMembers.map((m) => m.id),
+    first,
+    cutoff,
+  );
+
+  const roomNumberById = new Map(rooms.map((room) => [room.id, room.number]));
+
+  const rows: RegisterRow[] = activeMembers.map((member) => {
+    const perDay = timeline.get(member.id);
+    let fullCount = 0;
+    let halfCount = 0;
+
+    const cells = days.map((day) => {
+      // Blank for days outside this member's stay, and for days still ahead.
+      if (compare(day, cutoff) > 0 || !isMemberActiveOn(member, day, today)) {
+        return { day, status: null };
+      }
+      const { status } = perDay?.get(day) ?? { status: "OFF" as MealStatus };
+      if (status === "FULL") fullCount += 1;
+      else if (status === "HALF_DAY" || status === "HALF_NIGHT") halfCount += 1;
+      return { day, status };
+    });
+
+    return {
+      memberId: member.id,
+      name: member.name,
+      roomNumber: roomNumberById.get(member.roomId) ?? "—",
+      cells,
+      fullCount,
+      halfCount,
+    };
+  });
+
+  rows.sort(
+    (a, b) =>
+      a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }) ||
+      a.name.localeCompare(b.name),
+  );
+
+  return { days, cutoff, rows };
+}
+
 // ---------------------------------------------------------------------------
 // Per-member day status + guest summary (Meal Status Board, PDF indicators)
 // ---------------------------------------------------------------------------

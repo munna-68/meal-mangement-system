@@ -1,0 +1,131 @@
+/* Plain CSS with literal colours so the sheet rasterises identically for the
+   PDF. Landscape register: names down the left, one column per day of the
+   month, split into two half-month blocks so a full month fits one page. */
+
+.sheet {
+  width: 1126px;
+  background: #ffffff;
+  color: #111111;
+  padding: 16px 18px 14px;
+  font-family: "Noto Sans Bengali", "Nirmala UI", "Bangla MN", "Kohinoor Bangla",
+    "Vrinda", system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.25;
+  border: 2px solid #111111;
+  box-sizing: border-box;
+}
+
+.header {
+  text-align: center;
+  border-bottom: 2px solid #111111;
+  padding-bottom: 6px;
+}
+
+.hostel {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.address {
+  font-size: 10.5px;
+  color: #333333;
+  margin-top: 1px;
+}
+
+.title {
+  margin-top: 5px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.monthLine {
+  margin-top: 3px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: #333333;
+}
+
+.legendKey {
+  font-weight: 700;
+  color: #111111;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 9px;
+  table-layout: fixed;
+}
+
+.table th,
+.table td {
+  border: 1px solid #111111;
+  text-align: center;
+  padding: 1px 2px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th {
+  background: #ececec;
+  font-weight: 700;
+}
+
+.table th.blockStart,
+.table td.blockStart {
+  border-left: 2px solid #111111;
+}
+
+.table td.idx {
+  color: #555555;
+}
+
+.table td.room {
+  font-weight: 700;
+}
+
+.table td.name {
+  text-align: left;
+  padding-left: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+.table td.code {
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.table td.codeOff {
+  color: #aaaaaa;
+  font-weight: 400;
+}
+
+.table td.total {
+  font-weight: 700;
+  background: #f6f6f6;
+}
+
+.blank {
+  color: #dddddd;
+}
+
+.footerNote {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #111111;
+  font-size: 10px;
+  color: #555555;
+  text-align: center;
+}

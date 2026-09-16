@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 
 import { LedgerSheet, type LedgerRowView } from "@/components/ledger-sheet";
+import { MealRegisterSheet } from "@/components/meal-register-sheet";
 import { PageHeader, Stat } from "@/components/page-header";
-import { buildSettlementRows, computeMonth } from "@/lib/calc";
+import {
+  buildSettlementRows,
+  computeMonth,
+  mealRegisterForMonth,
+} from "@/lib/calc";
 import {
   addMonths,
   currentMonthKey,
@@ -146,6 +151,15 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
   ).sort((a, b) => (a < b ? 1 : -1));
 
   const ramadanMode = snapshot.settings.ramadanMode;
+
+  const register = mealRegisterForMonth({
+    month,
+    cutoff: monthEnd(month),
+    members: snapshot.members,
+    rooms: snapshot.rooms,
+    changes: snapshot.changes,
+    today: snapshot.today,
+  });
 
   return (
     <>
@@ -294,6 +308,16 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
             previousMonthLabel={`${formatBengaliMonth(addMonths(month, -1))} এর`}
             rows={rows}
             ramadanMode={ramadanMode}
+          />
+        </div>
+
+        <div id="meal-register-sheet" style={{ marginTop: 24 }}>
+          <MealRegisterSheet
+            hostelName={snapshot.settings.hostelName}
+            address={snapshot.settings.address}
+            month={month}
+            days={register.days}
+            rows={register.rows}
           />
         </div>
       </div>

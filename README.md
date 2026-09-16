@@ -135,12 +135,25 @@ Today's Bazar without affecting other days.
 
 ## PDF exports
 
-Both PDFs are built by rasterising an on-page HTML layout at print quality. That
+Three sheets, each rasterised from an on-page HTML layout at print quality. That
 is deliberate: Latin-only PDF libraries do not shape Bengali conjuncts, so the
-text would come out broken. The layouts (`bazar-slip`, `ledger-sheet`) use plain
-CSS with literal colours so the output is identical everywhere.
+text would come out broken. The layouts (`bazar-slip`, `ledger-sheet`,
+`meal-register-sheet`) use plain CSS with literal colours so the output is
+identical everywhere, and every sheet is sized to its page so nothing
+letterboxes.
 
-On a phone, **Share slip** hands the PDF straight to the system share sheet (the
+| Sheet | Page | Shape |
+| --- | --- | --- |
+| Daily bazar slip | A5 portrait | Room grid (রাত / দুপুর) left, money box right — matches the paper form. No menu section. |
+| Monthly settlement ledger | A4 landscape | One row per member, mirroring the existing Excel columns |
+| Monthly meal register | A4 landscape | One row per member, one column per day, coded **F** = full, **D** = half-day, **N** = half-night, **·** = off |
+
+The meal register is the month-at-a-glance sheet: names down the left, days
+across the top in two half-month blocks, exactly like the mess's paper
+attendance register. Its ফুল / হাফ totals are computed from the same engine as
+the ledger, so the two always agree (there is a test asserting this).
+
+On a phone, **Share** hands the PDF straight to the system share sheet (the
 group chat); on desktop it falls back to a download.
 
 ## Decisions worth confirming
