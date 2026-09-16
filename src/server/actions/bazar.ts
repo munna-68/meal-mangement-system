@@ -167,6 +167,33 @@ export async function deleteBazarRecord(date: string): Promise<ActionResult> {
   return ok();
 }
 
+export async function saveBazarRecordForm(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const str = (key: string) => {
+    const value = formData.get(key);
+    return typeof value === "string" ? value : undefined;
+  };
+  const num = (key: string) => {
+    const value = str(key);
+    if (value === undefined || value.trim() === "") return undefined;
+    return Number(value);
+  };
+
+  return saveBazarRecord({
+    date: str("date") ?? "",
+    deductionAmount: num("deductionAmount") ?? 0,
+    deductionReason: str("deductionReason"),
+    advanceGiven: num("advanceGiven") ?? 0,
+    actualExpense: num("actualExpense") ?? 0,
+    changeReturned: num("changeReturned"),
+    menuNight: str("menuNight"),
+    menuMorning: str("menuMorning"),
+    menuNoon: str("menuNoon"),
+  });
+}
+
 /** Turns the recurring daily Extra or the manager's fee off for a single day. */
 export async function toggleAutoExtra(input: {
   date: string;

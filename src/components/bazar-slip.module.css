@@ -1,0 +1,181 @@
+/* Plain CSS with literal colours (no theme colour functions) so the slip
+   rasterises identically for the PDF and prints cleanly. */
+
+.slip {
+  width: 560px;
+  background: #ffffff;
+  color: #111111;
+  padding: 22px 24px 20px;
+  font-family: "Noto Sans Bengali", "Nirmala UI", "Bangla MN", "Kohinoor Bangla",
+    "Vrinda", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  border: 1px solid #111111;
+  box-sizing: border-box;
+}
+
+.header {
+  text-align: center;
+  border-bottom: 2px solid #111111;
+  padding-bottom: 8px;
+}
+
+.hostel {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.address {
+  font-size: 11px;
+  color: #333333;
+  margin-top: 2px;
+}
+
+.title {
+  margin-top: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.metaStrong {
+  font-weight: 700;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  border: 1px solid #111111;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.table th {
+  background: #f1f1f1;
+  font-weight: 700;
+}
+
+.table td.room {
+  font-weight: 700;
+  background: #fafafa;
+}
+
+.summary {
+  margin-top: 12px;
+  border: 1px solid #111111;
+}
+
+.summaryRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px;
+  border-bottom: 1px dashed #cccccc;
+}
+
+.summaryRow:last-child {
+  border-bottom: none;
+}
+
+.summaryLabel {
+  flex: 1;
+}
+
+.summaryAmount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-top: 2px solid #111111;
+  background: #f1f1f1;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.deduction {
+  color: #b00020;
+  border-top: 1px solid #111111;
+}
+
+.deductionReason {
+  color: #b00020;
+  font-weight: 600;
+}
+
+.cash {
+  margin-top: 10px;
+  border: 1px solid #111111;
+}
+
+.cashRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-bottom: 1px dashed #cccccc;
+}
+
+.cashRow:last-child {
+  border-bottom: none;
+}
+
+.cashStrong {
+  font-weight: 700;
+}
+
+.menu {
+  margin-top: 10px;
+  border-top: 2px solid #111111;
+  padding-top: 8px;
+  font-size: 12px;
+}
+
+.menuTitle {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.menuLine {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.menuLabel {
+  min-width: 52px;
+  font-weight: 600;
+}
+
+.menuValue {
+  flex: 1;
+  border-bottom: 1px dotted #999999;
+  min-height: 16px;
+}
+
+.footerNote {
+  margin-top: 10px;
+  font-size: 10px;
+  color: #666666;
+  text-align: center;
+}
