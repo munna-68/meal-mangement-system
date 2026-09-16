@@ -5,10 +5,22 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 
 import { db } from "@/db";
-import { bazarDuties, bazarDutyRooms, dailyBazarRecords } from "@/db/schema";
+import {
+  bazarDuties,
+  bazarDutyRooms,
+  dailyBazarRecords,
+  rooms,
+} from "@/db/schema";
 import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
 import { computeDayTotals, rateCardFor } from "@/lib/calc";
-import { isValidDateKey, todayKey } from "@/lib/dates";
+import {
+  addDays,
+  isValidDateKey,
+  isValidMonthKey,
+  monthEnd,
+  monthStart,
+  todayKey,
+} from "@/lib/dates";
 import { requireSession } from "@/server/auth";
 import {
   ensureAutoExtrasForDate,
@@ -68,6 +80,176 @@ export async function deleteBazarDuty(date: string): Promise<ActionResult> {
   return ok();
 }
 
+const rosterSchema = z.object({
+  month: z.string().refine(isValidMonthKey, "Invalid month"),
+  /** First day of the run; the sequence continues to the end of the month. */
+  startDate: z.string().refine(isValidDateKey, "Invalid start date"),
+  /** The room whose turn it is on the start date. */
+  startRoomId: z.string().min(1, "Pick a starting room"),
+});
+
+/**
+ * Splits the rooms into the units that take one day each. Rooms with two or
+ * more beds go alone; single-bed rooms are paired up, because one person alone
+ * cannot cover a day's shopping.
+ */
+export function buildDutyUnits(
+  rooms: { id: string; capacity: number }[],
+): string[][] {
+  const units: string[][] = [];
+  let unpairedSingles: string[] = [];
+
+  for (const room of rooms) {
+    if (room.capacity <= 1) {
+      unpairedSingles.push(room.id);
+      if (unpairedSingles.length === 2) {
+        units.push(unpairedSingles);
+        unpairedSingles = [];
+      }
+    } else {
+      units.push([room.id]);
+    }
+  }
+
+  // An odd single left at the end still has to take a turn; it goes alone.
+  if (unpairedSingles.length > 0) units.push(unpairedSingles);
+
+  return units;
+}
+
+/**
+ * Fills the rest of the month with the duty sequence, starting from a chosen
+ * room and date. Everything after the start follows the room order and wraps
+ * around, so re-running with a different start date simply rewrites the run.
+ */
+export async function autoAssignRoster(
+  input: z.infer<typeof rosterSchema>,
+): Promise<ActionResult> {
+  await requireSession();
+  const parsed = rosterSchema.safeParse(input);
+  if (!parsed.success) return fail(firstIssue(parsed.error, "Invalid roster"));
+  const { month, startDate, startRoomId } = parsed.data;
+
+  if (startDate < monthStart(month) || startDate > monthEnd(month)) {
+    return fail("The start date must fall inside the month you are filling.");
+  }
+
+  try {
+    const roomRows = await db
+      .select({ id: rooms.id, capacity: rooms.capacity, number: rooms.number })
+      .from(rooms)
+      .orderBy(rooms.number);
+
+    if (roomRows.length === 0) return fail("Add some rooms first.");
+
+    const units = buildDutyUnits(roomRows);
+    if (units.length === 0) return fail("No rooms can take a duty.");
+
+    const startIndex = units.findIndex((unit) => unit.includes(startRoomId));
+    if (startIndex < 0) return fail("That room is not in the rotation.");
+    const ordered = [...units.slice(startIndex), ...units.slice(0, startIndex)];
+
+    const last = monthEnd(month);
+    let cursor = startDate;
+    let index = 0;
+    let assigned = 0;
+    let guard = 0;
+
+    while (cursor <= last && guard < 400) {
+      const roomIds = ordered[index % ordered.length];
+
+      const [duty] = await db
+        .insert(bazarDuties)
+        .values({ date: cursor })
+        .onConflictDoUpdate({ target: bazarDuties.date, set: { date: cursor } })
+        .returning();
+
+      await db
+        .delete(bazarDutyRooms)
+        .where(eq(bazarDutyRooms.bazarDutyId, duty.id));
+      await db
+        .insert(bazarDutyRooms)
+        .values(roomIds.map((roomId) => ({ bazarDutyId: duty.id, roomId })))
+        .onConflictDoNothing();
+
+      assigned += 1;
+      index += 1;
+      cursor = addDays(cursor, 1);
+      guard += 1;
+    }
+
+    refresh();
+    return ok(`Assigned ${assigned} days`);
+  } catch (error) {
+    return fail(firstIssue(error, "Could not build the roster"));
+  }
+}
+
+const swapSchema = z.object({
+  dateA: z.string().refine(isValidDateKey, "Invalid date"),
+  dateB: z.string().refine(isValidDateKey, "Invalid date"),
+});
+
+/** Exchanges the rooms assigned to two days, leaving notes and Khala days alone. */
+export async function swapDutyDays(
+  input: z.infer<typeof swapSchema>,
+): Promise<ActionResult> {
+  await requireSession();
+  const parsed = swapSchema.safeParse(input);
+  if (!parsed.success) return fail(firstIssue(parsed.error, "Invalid swap"));
+  const { dateA, dateB } = parsed.data;
+  if (dateA === dateB) return ok("Nothing to swap");
+
+  try {
+    const [dutyA] = await db
+      .select()
+      .from(bazarDuties)
+      .where(eq(bazarDuties.date, dateA))
+      .limit(1);
+    const [dutyB] = await db
+      .select()
+      .from(bazarDuties)
+      .where(eq(bazarDuties.date, dateB))
+      .limit(1);
+
+    const roomsOf = async (dutyId: string) => {
+      const rows = await db
+        .select({ roomId: bazarDutyRooms.roomId })
+        .from(bazarDutyRooms)
+        .where(eq(bazarDutyRooms.bazarDutyId, dutyId));
+      return rows.map((row) => row.roomId);
+    };
+
+    const roomsA = dutyA ? await roomsOf(dutyA.id) : [];
+    const roomsB = dutyB ? await roomsOf(dutyB.id) : [];
+
+    const writeRooms = async (date: string, roomIds: string[]) => {
+      const [duty] = await db
+        .insert(bazarDuties)
+        .values({ date })
+        .onConflictDoUpdate({ target: bazarDuties.date, set: { date } })
+        .returning();
+      await db
+        .delete(bazarDutyRooms)
+        .where(eq(bazarDutyRooms.bazarDutyId, duty.id));
+      if (roomIds.length > 0) {
+        await db
+          .insert(bazarDutyRooms)
+          .values(roomIds.map((roomId) => ({ bazarDutyId: duty.id, roomId })))
+          .onConflictDoNothing();
+      }
+    };
+
+    await writeRooms(dateA, roomsB);
+    await writeRooms(dateB, roomsA);
+
+    refresh();
+    return ok("Duty swapped");
+  } catch (error) {
+    return fail(firstIssue(error, "Could not swap the duty"));
+  }
+}
+
 const bazarRecordSchema = z.object({
   date: z.string().refine(isValidDateKey, "Invalid date"),
   deductionAmount: z.coerce.number().int().min(0).default(0),
@@ -103,7 +285,6 @@ export async function saveBazarRecord(
   }
 
   try {
-    await ensureAutoExtrasForDate(data.date);
     const snapshot = await loadLedgerSnapshot();
     const totals = computeDayTotals({
       date: data.date,
@@ -147,12 +328,16 @@ export async function saveBazarRecord(
       .insert(dailyBazarRecords)
       .values(values)
       .onConflictDoUpdate({ target: dailyBazarRecords.date, set: values });
+
+    // Confirming the bazar is what registers that day's recurring costs, so the
+    // record must exist before the generator looks for it.
+    await ensureAutoExtrasForDate(data.date);
   } catch (error) {
     return fail(firstIssue(error, "Could not save the bazar record"));
   }
 
   refresh();
-  return ok("Bazar record saved");
+  return ok("Bazar confirmed");
 }
 
 export async function saveBazarRecordForm(

@@ -59,6 +59,7 @@ export function PdfButton({
   mode = "download",
   format = "a5",
   orientation = "portrait",
+  beforeExport,
   variant = "default",
   size = "sm",
   className,
@@ -69,6 +70,11 @@ export function PdfButton({
   mode?: Mode;
   format?: Format;
   orientation?: "portrait" | "landscape";
+  /**
+   * Runs before the sheet is rasterised. Returning false aborts the export, so
+   * a caller can insist that the day is saved before a PDF can be produced.
+   */
+  beforeExport?: () => Promise<boolean>;
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "sm" | "default" | "lg";
   className?: string;
@@ -78,6 +84,7 @@ export function PdfButton({
   async function run() {
     setBusy(true);
     try {
+      if (beforeExport && !(await beforeExport())) return;
       const blob = await buildPdfBlob(targetId, format, orientation);
 
       if (mode === "share") {

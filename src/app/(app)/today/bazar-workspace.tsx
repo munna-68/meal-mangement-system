@@ -1,10 +1,12 @@
 "use client";
 
 import { useActionState, useOptimistic, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
+  CheckCircle2Icon,
   InfoIcon,
   RotateCcwIcon,
 } from "lucide-react";
@@ -24,7 +26,11 @@ import type { DayTotals, ExtraCategory, RoomDayRow } from "@/lib/calc";
 import { EXTRA_CATEGORY_LABELS } from "@/lib/calc";
 import { todayKey } from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
-import { saveBazarRecordForm, toggleAutoExtra } from "@/server/actions/bazar";
+import {
+  saveBazarRecord,
+  saveBazarRecordForm,
+  toggleAutoExtra,
+} from "@/server/actions/bazar";
 
 export interface WorkspaceExtra {
   id: string;
@@ -44,6 +50,8 @@ export interface BazarInitial {
   advanceGiven: number;
   actualExpense: number;
   changeReturned: number;
+  /** Whether a bazar record exists for this date — i.e. the day is confirmed. */
+  confirmed: boolean;
 }
 
 const initialActionState: ActionResult = { ok: true };
@@ -76,6 +84,7 @@ export function BazarWorkspace({
     initialActionState,
   );
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const [optimisticExtras, applyExtraPatch] = useOptimistic(
     extras,
@@ -99,10 +108,56 @@ export function BazarWorkspace({
     (item) => item.date === date && item.showInDailyBudget && !item.voided,
   );
   const extraAmount = budgetExtras.reduce((total, item) => total + item.amount, 0);
+
+  // The recurring daily Extra and the manager's fee are only materialised once
+  // the day is confirmed. Until then they are shown as pending so the shopper's
+  // target budget is right, but they are not yet charged to anyone.
+  const isConfirmed = initial.confirmed;
+  const autoRowsToday = optimisticExtras.filter(
+    (item) => item.date === date && item.isAuto,
+  );
+  const pendingDailyExtra = totals.rateCard?.dailyExtraAmount ?? 0;
+  const pendingManagerFee = totals.rateCard?.managerDailyFee ?? 0;
+  const showPendingRecurring = !isConfirmed && autoRowsToday.length === 0;
+  const pendingRecurringAmount = showPendingRecurring
+    ? pendingDailyExtra + pendingManagerFee
+    : 0;
+
+  const displayExtraAmount = extraAmount + pendingRecurringAmount;
   const computedChange = advance - expense;
   const changeReturned = manualChange ?? computedChange;
-  const totalBudget = totals.mealsSubtotal + extraAmount - deduction;
+  const totalBudget = totals.mealsSubtotal + displayExtraAmount - deduction;
   const isFuture = date > todayKey();
+
+  async function confirmDay(): Promise<boolean> {
+    const result = await saveBazarRecord({
+      date,
+      deductionAmount: deduction,
+      deductionReason: reason,
+      advanceGiven: advance,
+      actualExpense: expense,
+      changeReturned: manualChange ?? undefined,
+    });
+    if (!result.ok) {
+      toast.error(result.error ?? "Could not confirm the bazar");
+      return false;
+    }
+    if (!isConfirmed) {
+      toast.success("Bazar confirmed — daily Extra and manager fee registered");
+    }
+    return true;
+  }
+
+  /**
+   * Exporting always confirms the day first, so a slip can never carry figures
+   * that were not registered.
+   */
+  async function confirmThenExport(): Promise<boolean> {
+    const okToExport = await confirmDay();
+    if (!okToExport) return false;
+    startTransition(() => router.refresh());
+    return true;
+  }
 
   function toggleRecurring(item: WorkspaceExtra, voided: boolean) {
     const kind = item.category === "MANAGER_FEE" ? "manager-fee" : "daily-extra";
@@ -136,6 +191,27 @@ export function BazarWorkspace({
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       ) : null}
+
+      {isFuture ? null : isConfirmed ? (
+        <Alert className="border-emerald-300 bg-emerald-50/60">
+          <CheckCircle2Icon className="text-emerald-700" />
+          <AlertDescription className="text-xs">
+            This day is <strong>confirmed</strong>. The daily Extra and the
+            manager&rsquo;s fee are registered, and the day counts towards the
+            mess&rsquo;s running days for the month.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Alert className="border-amber-300 bg-amber-50/70">
+          <AlertTriangleIcon className="text-amber-700" />
+          <AlertDescription className="text-xs">
+            This day is <strong>not confirmed yet</strong>, so nothing is
+            registered. Confirming adds the {formatTaka(pendingDailyExtra)} daily
+            Extra and the {formatTaka(pendingManagerFee)} manager&rsquo;s fee to
+            the month pool. Downloading or sharing the slip confirms it for you.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
         <header className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2">
@@ -175,11 +251,15 @@ export function BazarWorkspace({
           <Line
             label="Extra"
             detail={
-              budgetExtras.length > 0
-                ? budgetExtras.map((item) => item.label).join(" + ")
-                : "nothing flagged for today"
+              showPendingRecurring && pendingRecurringAmount > 0
+                ? `${formatTaka(pendingDailyExtra)} daily Extra + ${formatTaka(
+                    pendingManagerFee,
+                  )} manager fee`
+                : budgetExtras.length > 0
+                  ? budgetExtras.map((item) => item.label).join(" + ")
+                  : "nothing flagged for today"
             }
-            amount={extraAmount}
+            amount={displayExtraAmount}
           />
           {deduction > 0 ? (
             <Line
@@ -204,17 +284,48 @@ export function BazarWorkspace({
             Today&rsquo;s recurring costs
           </h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            The daily Extra and the manager&rsquo;s fee are added to every day
-            automatically. Turn either off for today if nothing was cooked.
+            {isConfirmed
+              ? "Charged for today because the bazar is confirmed. Turn either off if nothing was cooked."
+              : "These are charged for each day the bazar actually runs. They register when you confirm today."}
           </p>
         </header>
         <div className="divide-y">
+          {showPendingRecurring ? (
+            <>
+              {pendingDailyExtra > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Daily recurring Extra</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Pending — charged when you confirm today
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-muted-foreground">
+                    {formatTaka(pendingDailyExtra)}
+                  </span>
+                </div>
+              ) : null}
+              {pendingManagerFee > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      Manager&rsquo;s daily fee
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Pending — charged when you confirm today
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-muted-foreground">
+                    {formatTaka(pendingManagerFee)}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
           {extras
-            .filter((item) =>
-              item.isAuto ||
-              (item.date === date && item.category !== "RECURRING_DAILY"),
-            )
             .filter((item) => item.date === date)
+            .filter((item) => item.isAuto || item.category !== "RECURRING_DAILY")
             .map((item) => (
               <div
                 key={item.id}
@@ -258,9 +369,17 @@ export function BazarWorkspace({
           <div className="flex items-center justify-between px-3 py-2.5">
             <span className="text-sm font-medium">Extra in today&rsquo;s budget</span>
             <span className="font-heading text-sm font-semibold tabular-nums">
-              {formatTaka(extraAmount)}
+              {formatTaka(displayExtraAmount)}
             </span>
           </div>
+          {showPendingRecurring && pendingRecurringAmount > 0 ? (
+            <p className="px-3 py-2 text-[11px] text-muted-foreground">
+              {formatTaka(pendingDailyExtra)} daily Extra +{" "}
+              {formatTaka(pendingManagerFee)} manager fee ={" "}
+              {formatTaka(pendingRecurringAmount)}. These join the month pool, so
+              they also count as the mess&rsquo;s running days for the month.
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -407,26 +526,47 @@ export function BazarWorkspace({
         </section>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" size="lg" disabled={saving || isFuture}>
-            {saving ? "Saving…" : "Save bazar record"}
+          <Button
+            type="submit"
+            size="lg"
+            disabled={saving || isFuture}
+            className={cn(
+              "text-base",
+              isConfirmed
+                ? "bg-emerald-700 text-white hover:bg-emerald-800"
+                : "bg-emerald-600 text-white hover:bg-emerald-700",
+            )}
+          >
+            {saving ? (
+              "Confirming…"
+            ) : (
+              <>
+                <CheckCircle2Icon />
+                {isConfirmed ? "Update confirmed bazar" : "Confirm today's bazar"}
+              </>
+            )}
           </Button>
           <PdfButton
             targetId="bazar-slip"
             fileName={`bazar-slip-${date}.pdf`}
-            label="Download PDF slip"
+            label={isConfirmed ? "Download PDF slip" : "Confirm & download slip"}
             format="a4"
             orientation="portrait"
             size="lg"
+            beforeExport={isFuture ? undefined : confirmThenExport}
+            variant="outline"
           />
           <PdfButton
             targetId="bazar-slip"
             fileName={`bazar-slip-${date}.pdf`}
-            label="Share slip"
+            label={isConfirmed ? "Share slip" : "Confirm & share slip"}
             format="a4"
             orientation="portrait"
             mode="share"
             variant="outline"
             size="lg"
+            className="hidden sm:inline-flex"
+            beforeExport={isFuture ? undefined : confirmThenExport}
           />
         </div>
         {isFuture ? (
@@ -503,7 +643,7 @@ export function BazarWorkspace({
             dutyRoomNumbers={dutyRoomNumbers}
             khalaDidShopping={khalaDidShopping}
             rooms={rooms}
-            totals={{ ...totals, extraAmount, totalBudget, deductionAmount: deduction }}
+            totals={{ ...totals, extraAmount: displayExtraAmount, totalBudget, deductionAmount: deduction }}
             deductionReason={reason || null}
             advanceGiven={advance}
             actualExpense={expense}

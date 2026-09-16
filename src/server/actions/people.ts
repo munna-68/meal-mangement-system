@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { members, rooms } from "@/db/schema";
 import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
-import { isValidDateKey, todayKey } from "@/lib/dates";
+import { todayKey } from "@/lib/dates";
 import { requireSession } from "@/server/auth";
 
 const roomSchema = z.object({
@@ -85,11 +85,6 @@ const memberSchema = z.object({
   phone: z.string().trim().max(40).optional(),
   bloodGroup: z.string().trim().max(8).optional(),
   active: z.boolean().default(true),
-  joinDate: z.string().refine(isValidDateKey, "Pick a valid join date"),
-  leaveDate: z
-    .string()
-    .optional()
-    .refine((value) => !value || isValidDateKey(value), "Pick a valid leave date"),
   notes: z.string().max(500).optional(),
 });
 
@@ -108,8 +103,11 @@ export async function createMember(
       phone: data.phone?.trim() || null,
       bloodGroup: data.bloodGroup?.trim() || null,
       active: data.active,
-      joinDate: data.joinDate,
-      leaveDate: data.leaveDate || null,
+      // There is no join-date field any more: a member starts counting on the
+      // day they are added, which is the safe default because days before their
+      // first status change already resolve to Off.
+      joinDate: todayKey(),
+      leaveDate: data.active ? null : todayKey(),
       notes: data.notes?.trim() || null,
     });
   } catch (error) {
@@ -127,10 +125,6 @@ export async function updateMember(
   if (!parsed.success) return fail(firstIssue(parsed.error, "Invalid member"));
   const data = parsed.data;
 
-  if (data.leaveDate && data.leaveDate < data.joinDate) {
-    return fail("The leave date cannot be before the join date.");
-  }
-
   try {
     await db
       .update(members)
@@ -140,10 +134,10 @@ export async function updateMember(
         phone: data.phone?.trim() || null,
         bloodGroup: data.bloodGroup?.trim() || null,
         active: data.active,
-        joinDate: data.joinDate,
-        // Marking a member inactive without a leave date stops their charges
-        // from today, so past months stay accurate.
-        leaveDate: data.leaveDate || (data.active ? null : todayKey()),
+        // joinDate is deliberately untouched: it is set once when the member is
+        // added, so editing a name never rewrites their billing history.
+        // Marking a member inactive stops their charges from today.
+        leaveDate: data.active ? null : todayKey(),
         notes: data.notes?.trim() || null,
       })
       .where(eq(members.id, input.id));

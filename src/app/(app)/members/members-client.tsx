@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { todayKey } from "@/lib/dates";
 import {
   createMember,
   createRoom,
@@ -45,6 +44,14 @@ import {
   updateMember,
   updateRoom,
 } from "@/server/actions/people";
+
+/** 1/2/3 beds are shown as room types rather than raw capacity. */
+function roomTypeLabel(capacity: number): string {
+  if (capacity <= 1) return "single";
+  if (capacity === 2) return "double";
+  if (capacity === 3) return "triple";
+  return `${capacity} beds`;
+}
 
 export interface RoomRecord {
   id: string;
@@ -89,7 +96,8 @@ export function MembersClient({
           <div>
             <h2 className="font-heading text-sm font-semibold">Rooms</h2>
             <p className="text-xs text-muted-foreground">
-              Capacity drives the electricity and Khala split.
+              Room type decides how the electricity, wi-fi and Khala bills are
+              split.
             </p>
           </div>
           <Button size="sm" onClick={() => setRoomDialog({ open: true, room: null })}>
@@ -102,7 +110,7 @@ export function MembersClient({
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-2 text-left font-medium">Room</th>
-                <th className="px-4 py-2 text-left font-medium">Capacity</th>
+                <th className="px-4 py-2 text-left font-medium">Type</th>
                 <th className="px-4 py-2 text-left font-medium">Occupants</th>
                 <th className="px-4 py-2 text-left font-medium">Notes</th>
                 <th className="px-4 py-2 text-right font-medium">Actions</th>
@@ -112,7 +120,9 @@ export function MembersClient({
               {rooms.map((room) => (
                 <tr key={room.id} className="border-t">
                   <td className="px-4 py-2 font-medium">{room.number}</td>
-                  <td className="px-4 py-2">{room.capacity}</td>
+                  <td className="px-4 py-2 capitalize">
+                    {roomTypeLabel(room.capacity)}
+                  </td>
                   <td className="px-4 py-2">
                     {room.occupants}
                     {room.capacity >= 2 && room.occupants === 1 ? (
@@ -181,7 +191,6 @@ export function MembersClient({
                 <th className="px-4 py-2 text-left font-medium">Name</th>
                 <th className="px-4 py-2 text-left font-medium">Phone</th>
                 <th className="px-4 py-2 text-left font-medium">Blood</th>
-                <th className="px-4 py-2 text-left font-medium">Joined</th>
                 <th className="px-4 py-2 text-left font-medium">Status</th>
                 <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
@@ -193,9 +202,6 @@ export function MembersClient({
                   <td className="px-4 py-2 font-medium">{member.name}</td>
                   <td className="px-4 py-2 tabular-nums">{member.phone ?? "—"}</td>
                   <td className="px-4 py-2">{member.bloodGroup ?? "—"}</td>
-                  <td className="px-4 py-2 tabular-nums text-muted-foreground">
-                    {member.joinDate}
-                  </td>
                   <td className="px-4 py-2">
                     {member.active ? (
                       <Badge variant="outline" className="border-emerald-400 text-emerald-700">
@@ -203,7 +209,7 @@ export function MembersClient({
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-muted-foreground">
-                        left {member.leaveDate ?? ""}
+                        inactive
                       </Badge>
                     )}
                   </td>
@@ -315,8 +321,9 @@ function RoomDialog({
         <DialogHeader>
           <DialogTitle>{room ? "Edit room" : "Add room"}</DialogTitle>
           <DialogDescription>
-            Capacity is 1 or 2. A member alone in a 2-capacity room pays double
-            for electricity and the solo Khala rate.
+            The room type decides how many people share it. A member alone in a
+            double or triple room is treated as solo: they pay the solo Khala
+            rate and the solo electricity share.
           </DialogDescription>
         </DialogHeader>
 
@@ -331,17 +338,21 @@ function RoomDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="room-capacity">Capacity</Label>
+            <Label htmlFor="room-capacity">Room type</Label>
             <Select value={capacity} onValueChange={setCapacity}>
               <SelectTrigger id="room-capacity" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">1 person</SelectItem>
-                <SelectItem value="2">2 people</SelectItem>
-                <SelectItem value="3">3 people</SelectItem>
+                <SelectItem value="1">Single — 1 person</SelectItem>
+                <SelectItem value="2">Double — 2 people</SelectItem>
+                <SelectItem value="3">Triple — 3 people</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-[11px] text-muted-foreground">
+              A room is &ldquo;solo&rdquo; when it has two or more beds but only
+              one person living in it.
+            </p>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="room-notes">Notes</Label>
@@ -400,8 +411,6 @@ function MemberDialog({
   const [phone, setPhone] = useState(member?.phone ?? "");
   const [bloodGroup, setBloodGroup] = useState(member?.bloodGroup ?? "");
   const [active, setActive] = useState(member?.active ?? true);
-  const [joinDate, setJoinDate] = useState(member?.joinDate ?? todayKey());
-  const [leaveDate, setLeaveDate] = useState(member?.leaveDate ?? "");
   const [notes, setNotes] = useState(member?.notes ?? "");
 
   const payload = {
@@ -410,8 +419,6 @@ function MemberDialog({
     phone,
     bloodGroup,
     active,
-    joinDate,
-    leaveDate,
     notes,
   };
 
@@ -421,8 +428,8 @@ function MemberDialog({
         <DialogHeader>
           <DialogTitle>{member ? `Edit ${member.name}` : "Add member"}</DialogTitle>
           <DialogDescription>
-            Inactive members stop accruing daily costs but keep their history and
-            final balance.
+            Counting starts the day a member is added. Turning off Active member
+            stops their daily costs from that day on.
           </DialogDescription>
         </DialogHeader>
 
@@ -445,7 +452,7 @@ function MemberDialog({
               <SelectContent>
                 {rooms.map((room) => (
                   <SelectItem key={room.id} value={room.id}>
-                    Room {room.number} (cap {room.capacity})
+                    Room {room.number} ({roomTypeLabel(room.capacity)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -467,24 +474,6 @@ function MemberDialog({
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               placeholder="e.g. 01570210744"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="member-join">Join date</Label>
-            <Input
-              id="member-join"
-              type="date"
-              value={joinDate}
-              onChange={(event) => setJoinDate(event.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="member-leave">Leave date (optional)</Label>
-            <Input
-              id="member-leave"
-              type="date"
-              value={leaveDate}
-              onChange={(event) => setLeaveDate(event.target.value)}
             />
           </div>
           <div className="flex items-center justify-between rounded-lg border px-3 py-2">
