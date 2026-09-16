@@ -79,6 +79,8 @@ export async function getMessSettings(): Promise<MessSettingsData | null> {
     hostelName: row.hostelName,
     address: row.address,
     ramadanMode: row.ramadanMode,
+    soloElectricityMultiplier: row.soloElectricityMultiplier,
+    soloWifiMultiplier: row.soloWifiMultiplier,
   };
 }
 

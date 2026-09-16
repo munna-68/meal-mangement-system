@@ -1,0 +1,2 @@
+ALTER TABLE "mess_settings" ADD COLUMN "solo_electricity_multiplier" integer DEFAULT 2 NOT NULL;--> statement-breakpoint
+ALTER TABLE "mess_settings" ADD COLUMN "solo_wifi_multiplier" integer DEFAULT 1 NOT NULL;

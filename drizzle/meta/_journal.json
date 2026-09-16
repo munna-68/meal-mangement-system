@@ -8,6 +8,13 @@
       "when": 1789583266740,
       "tag": "0000_tricky_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789589886109,
+      "tag": "0001_aberrant_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }

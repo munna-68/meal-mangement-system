@@ -7,12 +7,16 @@ export interface MessSettingsData {
   hostelName: string;
   address: string;
   ramadanMode: boolean;
+  soloElectricityMultiplier: number;
+  soloWifiMultiplier: number;
 }
 
 export const FALLBACK_SETTINGS: MessSettingsData = {
   hostelName: DEFAULT_HOSTEL_NAME,
   address: DEFAULT_ADDRESS,
   ramadanMode: false,
+  soloElectricityMultiplier: 2,
+  soloWifiMultiplier: 1,
 };
 
 export const MEAL_STATUS_VALUES = [

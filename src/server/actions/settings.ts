@@ -12,6 +12,13 @@ const settingsSchema = z.object({
   hostelName: z.string().trim().min(1, "Hostel name is required").max(200),
   address: z.string().trim().min(1, "Address is required").max(400),
   ramadanMode: z.boolean().default(false),
+  soloElectricityMultiplier: z.coerce
+    .number()
+    .int()
+    .min(1, "Must be at least 1")
+    .max(10)
+    .default(2),
+  soloWifiMultiplier: z.coerce.number().int().min(1).max(10).default(1),
 });
 
 export async function updateMessSettings(
@@ -21,24 +28,23 @@ export async function updateMessSettings(
   const parsed = settingsSchema.safeParse(input);
   if (!parsed.success) return fail(firstIssue(parsed.error, "Invalid settings"));
 
+  const values = {
+    id: 1,
+    hostelName: parsed.data.hostelName,
+    address: parsed.data.address,
+    ramadanMode: parsed.data.ramadanMode,
+    soloElectricityMultiplier: parsed.data.soloElectricityMultiplier,
+    soloWifiMultiplier: parsed.data.soloWifiMultiplier,
+    updatedAt: new Date(),
+  };
+
   try {
     await db
       .insert(messSettings)
-      .values({
-        id: 1,
-        hostelName: parsed.data.hostelName,
-        address: parsed.data.address,
-        ramadanMode: parsed.data.ramadanMode,
-        updatedAt: new Date(),
-      })
+      .values(values)
       .onConflictDoUpdate({
         target: messSettings.id,
-        set: {
-          hostelName: parsed.data.hostelName,
-          address: parsed.data.address,
-          ramadanMode: parsed.data.ramadanMode,
-          updatedAt: new Date(),
-        },
+        set: values,
       });
   } catch (error) {
     return fail(firstIssue(error, "Could not save the settings"));

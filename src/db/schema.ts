@@ -54,6 +54,15 @@ export const messSettings = pgTable("mess_settings", {
   hostelName: text("hostel_name").notNull(),
   address: text("address").notNull(),
   ramadanMode: boolean("ramadan_mode").notNull().default(false),
+  /**
+   * Multiples of the per-head utility share charged to a member who is alone in
+   * a multi-bed room. The mess doubles electricity but not wifi for them, and
+   * wants to be able to change either without a code change.
+   */
+  soloElectricityMultiplier: integer("solo_electricity_multiplier")
+    .notNull()
+    .default(2),
+  soloWifiMultiplier: integer("solo_wifi_multiplier").notNull().default(1),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

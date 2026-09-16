@@ -302,8 +302,10 @@ section("Daily budget");
 // Electricity + wifi apportionment
 // ---------------------------------------------------------------------------
 
-section("Electricity + wifi apportionment (by room capacity)");
+section("Electricity + wifi apportionment (even per head, solo multiples)");
 {
+  // Bills: electricity 1000, wifi 500. Four active members.
+  //   m1, m2 share a 2-bed room, m3 is alone in a 2-bed room, m4 is in a 1-bed room.
   const apportionment = apportionUtilities({
     members: MEMBERS,
     rooms: ROOMS,
@@ -313,33 +315,80 @@ section("Electricity + wifi apportionment (by room capacity)");
     today: "2025-03-31",
   });
 
-  check("total capacity = 2+2+1", apportionment.totalCapacity, 5);
-  check("per unit rate = 1500/5", apportionment.perUnitRate, 300);
-  check("sharing a 2-cap room pays 1x", apportionment.byMember.get("m1"), {
-    electricity: 200,
-    wifi: 100,
-    total: 300,
+  check("member count is the divisor", apportionment.memberCount, 4);
+  check("per-head electricity = 1000/4", apportionment.perHeadElectricity, 250);
+  check("per-head wifi = 500/4", apportionment.perHeadWifi, 125);
+  check("exactly one solo member", apportionment.soloCount, 1);
+
+  check("sharing a 2-bed room pays the base share", apportionment.byMember.get("m1"), {
+    electricity: 250,
+    wifi: 125,
+    total: 375,
   });
-  check("roommate pays the same", apportionment.byMember.get("m2"), {
-    electricity: 200,
-    wifi: 100,
-    total: 300,
+  check("roommate pays the same base share", apportionment.byMember.get("m2"), {
+    electricity: 250,
+    wifi: 125,
+    total: 375,
   });
-  check("alone in a 2-cap room pays exactly 2x", apportionment.byMember.get("m3"), {
-    electricity: 400,
-    wifi: 200,
-    total: 600,
+  check(
+    "alone in a 2-bed room: electricity doubled, wifi NOT doubled",
+    apportionment.byMember.get("m3"),
+    { electricity: 500, wifi: 125, total: 625 },
+  );
+  check("a 1-bed room pays the base share", apportionment.byMember.get("m4"), {
+    electricity: 250,
+    wifi: 125,
+    total: 375,
   });
-  check("1-cap room pays exactly 1x", apportionment.byMember.get("m4"), {
-    electricity: 200,
-    wifi: 100,
-    total: 300,
-  });
+
+  // Doubling one member's share collects more than the bill. That is the mess's
+  // rule as described, so it is asserted rather than treated as a rounding bug.
   const collected = [...apportionment.byMember.values()].reduce(
     (t, s) => t + s.total,
     0,
   );
-  check("shares add up to the full bill", collected, 1500);
+  const billTotal =
+    apportionment.totalElectricity + apportionment.totalWifi;
+  check("collected = bill + one extra electricity share", collected, billTotal + 250);
+
+  // The multiples are configurable, because the mess does not always treat both
+  // bills the same way.
+  const wifiDoubled = apportionUtilities({
+    members: MEMBERS,
+    rooms: ROOMS,
+    bills: BILLS,
+    from: "2025-03-01",
+    to: "2025-03-31",
+    soloElectricityMultiplier: 2,
+    soloWifiMultiplier: 2,
+    today: "2025-03-31",
+  });
+  check("wifi can be doubled too", wifiDoubled.byMember.get("m3"), {
+    electricity: 500,
+    wifi: 250,
+    total: 750,
+  });
+
+  const noPremium = apportionUtilities({
+    members: MEMBERS,
+    rooms: ROOMS,
+    bills: BILLS,
+    from: "2025-03-01",
+    to: "2025-03-31",
+    soloElectricityMultiplier: 1,
+    soloWifiMultiplier: 1,
+    today: "2025-03-31",
+  });
+  check("setting both to 1 charges everyone the same", noPremium.byMember.get("m3"), {
+    electricity: 250,
+    wifi: 125,
+    total: 375,
+  });
+  const evenCollected = [...noPremium.byMember.values()].reduce(
+    (t, s) => t + s.total,
+    0,
+  );
+  check("with no premium the shares add up to the bill", evenCollected, billTotal);
 }
 
 // ---------------------------------------------------------------------------
@@ -428,10 +477,11 @@ section("Monthly computation");
   check("31 full meals counted", m1.fullMealCount, 31);
   check("meal amount = 31 x 60", m1.mealAmount, 1860);
   check("khala is flat for the month, not per day", m1.khalaAmount, 300);
-  check("khala + wifi + electricity", m1.khalaElecWifiAmount, 600);
+  check("khala + wifi + electricity = 300 + 375", m1.khalaElecWifiAmount, 675);
   check("extra is the same for everyone", m1.extraAmount, 375);
-  check("total cost m1 = 1860+300+300+375", m1.totalCost, 2835);
-  check("total cost m3 = 1860+400+600+375", m3.totalCost, 3235);
+  check("total cost m1 = 1860+675+375", m1.totalCost, 2910);
+  check("solo member pays 400 khala + 625 utilities", m3.khalaElecWifiAmount, 1025);
+  check("total cost m3 = 1860+1025+375", m3.totalCost, 3260);
   check("everyone gets an identical extra", [
     ...computation.perMember.values(),
   ].every((r) => r.extraAmount === 375), true);

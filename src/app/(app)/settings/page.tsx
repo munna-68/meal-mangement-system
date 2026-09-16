@@ -21,6 +21,8 @@ export default async function SettingsPage() {
         hostelName={settings.hostelName}
         address={settings.address}
         ramadanMode={settings.ramadanMode}
+        soloElectricityMultiplier={settings.soloElectricityMultiplier}
+        soloWifiMultiplier={settings.soloWifiMultiplier}
       />
     </>
   );

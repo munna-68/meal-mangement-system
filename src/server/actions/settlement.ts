@@ -67,6 +67,8 @@ export async function closeMonth(
       bills: snapshot.bills,
       rateCards: snapshot.rateCards,
       ramadanMode: snapshot.settings.ramadanMode,
+      soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
+      soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
       today: snapshot.today,
     });
 

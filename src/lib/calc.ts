@@ -660,18 +660,30 @@ export interface UtilityShare {
 }
 
 export interface UtilityApportionment {
-  perUnitRate: number;
-  totalCapacity: number;
+  perHeadElectricity: number;
+  perHeadWifi: number;
   totalElectricity: number;
   totalWifi: number;
+  memberCount: number;
+  soloCount: number;
   byMember: Map<string, UtilityShare>;
 }
 
 /**
- * Electricity and wifi are per-room fixed costs, so they are apportioned by
- * room capacity rather than headcount: each member pays the per-unit rate times
- * their room's capacity divided by the number of occupants. Someone alone in a
- * 2-capacity room therefore pays exactly double a member sharing one.
+ * A member counts as "solo" when they are the only occupant of a room with two
+ * or more beds. That single condition drives both the higher Khala rate and the
+ * solo utility multipliers, so it lives in one place.
+ */
+export function isSoloInSharedRoom(room: RoomOccupancy | undefined): boolean {
+  return !!room && room.capacity >= 2 && room.occupants <= 1;
+}
+
+/**
+ * Electricity and wifi are split evenly per head — every member pays the same
+ * base share — except that a member alone in a multi-bed room pays a multiple
+ * of the electricity and/or wifi share. The two multipliers are configurable
+ * because the mess does not always treat both bills the same way (by default
+ * electricity is doubled for a solo member while wifi is not).
  */
 export function apportionUtilities(input: {
   members: MemberData[];
@@ -679,9 +691,20 @@ export function apportionUtilities(input: {
   bills: UtilityBillData[];
   from: DateKey;
   to: DateKey;
+  soloElectricityMultiplier?: number;
+  soloWifiMultiplier?: number;
   today?: DateKey;
 }): UtilityApportionment {
-  const { members, rooms, bills, from, to, today = todayKey() } = input;
+  const {
+    members,
+    rooms,
+    bills,
+    from,
+    to,
+    soloElectricityMultiplier = 2,
+    soloWifiMultiplier = 1,
+    today = todayKey(),
+  } = input;
   const month = monthOf(from);
   const occupancy = occupancyForRange({ members, rooms, from, to, today });
 
@@ -695,26 +718,24 @@ export function apportionUtilities(input: {
     monthBills.filter((bill) => bill.type === "WIFI").map((bill) => bill.amount),
   );
 
-  const totalCapacity = [...occupancy.values()]
-    .filter((room) => room.hasActiveMember)
-    .reduce((total, room) => total + room.capacity, 0);
+  const activeMembers = members.filter((member) =>
+    isMemberActiveInRange(member, from, to, today),
+  );
+  const memberCount = activeMembers.length;
 
-  const perUnitRate =
-    totalCapacity > 0 ? (totalElectricity + totalWifi) / totalCapacity : 0;
-  const elecPerUnit = totalCapacity > 0 ? totalElectricity / totalCapacity : 0;
-  const wifiPerUnit = totalCapacity > 0 ? totalWifi / totalCapacity : 0;
+  const perHeadElectricity =
+    memberCount > 0 ? totalElectricity / memberCount : 0;
+  const perHeadWifi = memberCount > 0 ? totalWifi / memberCount : 0;
 
   const byMember = new Map<string, UtilityShare>();
-  for (const member of members) {
-    if (!isMemberActiveInRange(member, from, to, today)) continue;
-    const room = occupancy.get(member.roomId);
-    if (!room || room.occupants === 0) {
-      byMember.set(member.id, { electricity: 0, wifi: 0, total: 0 });
-      continue;
-    }
-    const weight = room.capacity / room.occupants;
-    const electricity = roundTaka(elecPerUnit * weight);
-    const wifi = roundTaka(wifiPerUnit * weight);
+  let soloCount = 0;
+  for (const member of activeMembers) {
+    const solo = isSoloInSharedRoom(occupancy.get(member.roomId));
+    if (solo) soloCount += 1;
+    const electricity = roundTaka(
+      perHeadElectricity * (solo ? soloElectricityMultiplier : 1),
+    );
+    const wifi = roundTaka(perHeadWifi * (solo ? soloWifiMultiplier : 1));
     byMember.set(member.id, {
       electricity,
       wifi,
@@ -723,17 +744,19 @@ export function apportionUtilities(input: {
   }
 
   return {
-    perUnitRate,
-    totalCapacity,
+    perHeadElectricity,
+    perHeadWifi,
     totalElectricity,
     totalWifi,
+    memberCount,
+    soloCount,
     byMember,
   };
 }
 
 /**
  * Khala is a flat rate per head: the normal rate when a room is at full
- * occupancy, the higher solo rate when a member is alone in a 2-capacity room,
+ * occupancy, the higher solo rate when a member is alone in a multi-bed room,
  * and the normal rate in a 1-capacity room.
  */
 export function khalaAmountFor(input: {
@@ -745,8 +768,9 @@ export function khalaAmountFor(input: {
   if (!rateCard) return 0;
   const room = occupancy.get(member.roomId);
   if (!room) return rateCard.khalaNormalRate;
-  const isSoloInSharedRoom = room.capacity >= 2 && room.occupants <= 1;
-  return isSoloInSharedRoom ? rateCard.khalaSoloRate : rateCard.khalaNormalRate;
+  return isSoloInSharedRoom(room)
+    ? rateCard.khalaSoloRate
+    : rateCard.khalaNormalRate;
 }
 
 export interface ExtraPool {
@@ -838,6 +862,9 @@ export interface MonthComputationInput {
   bills: UtilityBillData[];
   rateCards: RateCardData[];
   ramadanMode?: boolean;
+  /** Multiples of the per-head utility share charged to a solo member. */
+  soloElectricityMultiplier?: number;
+  soloWifiMultiplier?: number;
   today?: DateKey;
 }
 
@@ -857,6 +884,8 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     bills,
     rateCards,
     ramadanMode = false,
+    soloElectricityMultiplier = 2,
+    soloWifiMultiplier = 1,
     today = todayKey(),
   } = input;
 
@@ -944,6 +973,8 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     bills,
     from,
     to: cutoff,
+    soloElectricityMultiplier,
+    soloWifiMultiplier,
     today,
   });
   const extraPool = extraPoolForRange({
@@ -1111,6 +1142,8 @@ export function computeRunningBalances(input: {
   settlements: SettlementData[];
   lastClosedMonth: MonthKey | null;
   ramadanMode?: boolean;
+  soloElectricityMultiplier?: number;
+  soloWifiMultiplier?: number;
   today?: DateKey;
 }): RunningBalanceResult {
   const {
@@ -1125,6 +1158,8 @@ export function computeRunningBalances(input: {
     settlements,
     lastClosedMonth,
     ramadanMode = false,
+    soloElectricityMultiplier = 2,
+    soloWifiMultiplier = 1,
     today = todayKey(),
   } = input;
 
@@ -1172,6 +1207,8 @@ export function computeRunningBalances(input: {
         bills,
         rateCards,
         ramadanMode,
+        soloElectricityMultiplier,
+        soloWifiMultiplier,
         today,
       });
       for (const [memberId, cost] of computation.perMember) {

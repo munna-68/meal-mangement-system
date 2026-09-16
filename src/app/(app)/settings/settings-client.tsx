@@ -16,15 +16,23 @@ export function SettingsClient({
   hostelName: initialName,
   address: initialAddress,
   ramadanMode: initialRamadan,
+  soloElectricityMultiplier: initialSoloElectricity,
+  soloWifiMultiplier: initialSoloWifi,
 }: {
   hostelName: string;
   address: string;
   ramadanMode: boolean;
+  soloElectricityMultiplier: number;
+  soloWifiMultiplier: number;
 }) {
   const { run, pending, error } = useAction();
   const [hostelName, setHostelName] = useState(initialName);
   const [address, setAddress] = useState(initialAddress);
   const [ramadanMode, setRamadanMode] = useState(initialRamadan);
+  const [soloElectricity, setSoloElectricity] = useState(
+    String(initialSoloElectricity),
+  );
+  const [soloWifi, setSoloWifi] = useState(String(initialSoloWifi));
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">
@@ -88,12 +96,74 @@ export function SettingsClient({
         ) : null}
       </section>
 
+      <section className="rounded-xl border bg-card p-4 shadow-sm">
+        <h2 className="font-heading text-sm font-semibold">
+          Solo member utility share
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Electricity and wi-fi are split evenly across every active member. A
+          member alone in a multi-bed room can be charged a multiple of that
+          share — set the multiple to 1 to charge them the same as everyone
+          else.
+        </p>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="solo-electricity">Electricity multiple</Label>
+            <Input
+              id="solo-electricity"
+              type="number"
+              min={1}
+              max={10}
+              step={1}
+              value={soloElectricity}
+              onChange={(event) => setSoloElectricity(event.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Default 2 — a solo member pays double the electricity share.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="solo-wifi">Wi-fi multiple</Label>
+            <Input
+              id="solo-wifi"
+              type="number"
+              min={1}
+              max={10}
+              step={1}
+              value={soloWifi}
+              onChange={(event) => setSoloWifi(event.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Default 1 — wi-fi is not doubled for a solo member.
+            </p>
+          </div>
+        </div>
+
+        <Alert className="mt-3">
+          <AlertDescription className="text-xs">
+            The Khala (maid) rate for a solo member is separate — set it as the
+            &ldquo;Khala solo rate&rdquo; on the Rate Card.
+          </AlertDescription>
+        </Alert>
+      </section>
+
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="flex items-center gap-3">
         <Button
           disabled={pending}
-          onClick={() => run(() => updateMessSettings({ hostelName, address, ramadanMode }))}
+          onClick={() =>
+            run(() =>
+              updateMessSettings({
+                hostelName,
+                address,
+                ramadanMode,
+                soloElectricityMultiplier: Number(soloElectricity) || 1,
+                soloWifiMultiplier: Number(soloWifi) || 1,
+              }),
+            )
+          }
         >
           Save settings
         </Button>

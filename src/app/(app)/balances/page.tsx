@@ -59,6 +59,8 @@ export default async function BalancesPage() {
     settlements: snapshot.settlements,
     lastClosedMonth: snapshot.lastClosedMonth,
     ramadanMode: snapshot.settings.ramadanMode,
+    soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
+    soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
     today: snapshot.today,
   });
 
