@@ -36,6 +36,7 @@ yarn-error.log*
 
 # local embedded postgres data
 /.pglite/
+/.pglite.backup-*/
 
 # tooling scratch worktrees (a second checkout of this repo)
 /.kilo/
