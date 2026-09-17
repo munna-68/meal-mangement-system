@@ -107,7 +107,10 @@ export function BazarWorkspace({
   const budgetExtras = optimisticExtras.filter(
     (item) => item.date === date && item.showInDailyBudget && !item.voided,
   );
-  const extraAmount = budgetExtras.reduce((total, item) => total + item.amount, 0);
+  const extraAmount = budgetExtras.reduce(
+    (total, item) => total + item.amount,
+    0,
+  );
 
   // The recurring daily Extra and the manager's fee are only materialised once
   // the day is confirmed. Until then they are shown as pending so the shopper's
@@ -191,7 +194,8 @@ export function BazarWorkspace({
   }
 
   function toggleRecurring(item: WorkspaceExtra, voided: boolean) {
-    const kind = item.category === "MANAGER_FEE" ? "manager-fee" : "daily-extra";
+    const kind =
+      item.category === "MANAGER_FEE" ? "manager-fee" : "daily-extra";
     startTransition(async () => {
       applyExtraPatch({ id: item.id, voided });
       const result = await toggleAutoExtra({ date, kind, voided });
@@ -205,9 +209,9 @@ export function BazarWorkspace({
       <Alert>
         <InfoIcon />
         <AlertDescription className="text-xs">
-          This is the <strong>target budget</strong> — what the shopper should get.
-          Actual spending is tracked separately below and never changes what an
-          individual member owes.
+          This is the <strong>target budget</strong> — what the shopper should
+          get. Actual spending is tracked separately below and never changes
+          what an individual member owes.
         </AlertDescription>
       </Alert>
 
@@ -237,18 +241,24 @@ export function BazarWorkspace({
           <AlertTriangleIcon className="text-amber-700" />
           <AlertDescription className="text-xs">
             This day is <strong>not confirmed yet</strong>, so nothing is
-            registered. Confirming adds the {formatTaka(pendingDailyExtra)} daily
-            Extra and the {formatTaka(pendingManagerFee)} manager&rsquo;s fee to
-            the month pool. Downloading or sharing the slip confirms it for you.
+            registered. Confirming adds the {formatTaka(pendingDailyExtra)}{" "}
+            daily Extra and the {formatTaka(pendingManagerFee)} manager&rsquo;s
+            fee to the month pool. Downloading or sharing the slip confirms it
+            for you.
           </AlertDescription>
         </Alert>
       )}
 
       <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
         <header className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2">
-          <h2 className="font-heading text-sm font-semibold">Budget breakdown</h2>
+          <h2 className="font-heading text-sm font-semibold">
+            Budget breakdown
+          </h2>
           <span className="text-xs text-muted-foreground">
-            rate card: {totals.rateCard ? formatTaka(totals.rateCard.fullMealRate) + " full" : "none"}
+            rate card:{" "}
+            {totals.rateCard
+              ? formatTaka(totals.rateCard.fullMealRate) + " full"
+              : "none"}
           </span>
         </header>
         <div className="divide-y">
@@ -296,7 +306,9 @@ export function BazarWorkspace({
           ) : null}
         </div>
         <div className="flex items-center justify-between gap-2 border-t bg-muted/40 px-3 py-2.5">
-          <span className="font-heading text-sm font-semibold">Total Budget</span>
+          <span className="font-heading text-sm font-semibold">
+            Total Budget
+          </span>
           <span className="font-heading text-lg font-semibold tabular-nums">
             {formatTaka(totalBudget)}
           </span>
@@ -350,7 +362,9 @@ export function BazarWorkspace({
 
           {extras
             .filter((item) => item.date === date)
-            .filter((item) => item.isAuto || item.category !== "RECURRING_DAILY")
+            .filter(
+              (item) => item.isAuto || item.category !== "RECURRING_DAILY",
+            )
             .map((item) => (
               <div
                 key={item.id}
@@ -385,14 +399,18 @@ export function BazarWorkspace({
                     <Switch
                       aria-label={`Include ${item.label} today`}
                       checked={!item.voided}
-                      onCheckedChange={(checked) => toggleRecurring(item, !checked)}
+                      onCheckedChange={(checked) =>
+                        toggleRecurring(item, !checked)
+                      }
                     />
                   ) : null}
                 </div>
               </div>
             ))}
           <div className="flex items-center justify-between px-3 py-2.5">
-            <span className="text-sm font-medium">Extra in today&rsquo;s budget</span>
+            <span className="text-sm font-medium">
+              Extra in today&rsquo;s budget
+            </span>
             <span className="font-heading text-sm font-semibold tabular-nums">
               {formatTaka(displayExtraAmount)}
             </span>
@@ -401,8 +419,8 @@ export function BazarWorkspace({
             <p className="px-3 py-2 text-[11px] text-muted-foreground">
               {formatTaka(pendingDailyExtra)} daily Extra +{" "}
               {formatTaka(pendingManagerFee)} manager fee ={" "}
-              {formatTaka(pendingRecurringAmount)}. These join the month pool, so
-              they also count as the mess&rsquo;s running days for the month.
+              {formatTaka(pendingRecurringAmount)}. These join the month pool,
+              so they also count as the mess&rsquo;s running days for the month.
             </p>
           ) : null}
         </div>
@@ -457,7 +475,10 @@ export function BazarWorkspace({
                       "border-red-400 text-red-700 placeholder:text-red-400",
                   )}
                 />
-                <p id="deductionReason-help" className="text-[11px] text-muted-foreground">
+                <p
+                  id="deductionReason-help"
+                  className="text-[11px] text-muted-foreground"
+                >
                   Required only when the deduction amount is above 0.
                 </p>
               </div>
@@ -523,7 +544,9 @@ export function BazarWorkspace({
                   type="number"
                   inputMode="numeric"
                   value={changeReturned}
-                  onChange={(event) => setManualChange(Number(event.target.value) || 0)}
+                  onChange={(event) =>
+                    setManualChange(Number(event.target.value) || 0)
+                  }
                   className="h-10"
                 />
                 <p className="text-[11px] text-muted-foreground">
@@ -573,14 +596,18 @@ export function BazarWorkspace({
             ) : (
               <>
                 <CheckCircle2Icon />
-                {isConfirmed ? "Update confirmed bazar" : "Confirm today's bazar"}
+                {isConfirmed
+                  ? "Update confirmed bazar"
+                  : "Confirm today's bazar"}
               </>
             )}
           </Button>
           <PdfButton
             targetId="bazar-slip"
             fileName={`bazar-slip-${date}.pdf`}
-            label={isConfirmed ? "Download PDF slip" : "Confirm & download slip"}
+            label={
+              isConfirmed ? "Download PDF slip" : "Confirm & download slip"
+            }
             format="a4"
             orientation="portrait"
             size="lg"

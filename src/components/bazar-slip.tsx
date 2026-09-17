@@ -51,8 +51,14 @@ export function BazarSlip({
 
   const showSehri = ramadanMode && totals.sehriCount > 0;
   const rate = totals.rateCard;
-  const grandGuestFull = rooms.reduce((total, room) => total + room.guestFullCount, 0);
-  const grandGuestHalf = rooms.reduce((total, room) => total + room.guestHalfCount, 0);
+  const grandGuestFull = rooms.reduce(
+    (total, room) => total + room.guestFullCount,
+    0,
+  );
+  const grandGuestHalf = rooms.reduce(
+    (total, room) => total + room.guestHalfCount,
+    0,
+  );
 
   return (
     <div className={styles.slip} lang="bn">
@@ -64,7 +70,10 @@ export function BazarSlip({
 
       <div className={styles.metaRow}>
         <span>
-          তারিখ: <span className={styles.metaStrong}>{formatBengaliNumericDate(date)}</span>
+          তারিখ:{" "}
+          <span className={styles.metaStrong}>
+            {formatBengaliNumericDate(date)}
+          </span>
         </span>
         <span>
           বাজারকারী রুম নং:{" "}
@@ -190,7 +199,9 @@ export function BazarSlip({
               <div className={styles.moneyRow}>
                 <span className={styles.moneyLabel}>অতিরিক্ত</span>
                 <span className={styles.moneyFormula} />
-                <span className={styles.moneyAmount}>+{formatTakaBengali(0)}</span>
+                <span className={styles.moneyAmount}>
+                  +{formatTakaBengali(0)}
+                </span>
               </div>
             )}
 
