@@ -2,7 +2,13 @@ import { cn } from "cn";
 
 import styles from "./ledger-sheet.module.css";
 
-import { formatBengaliMonth, toBengaliDigits, type MonthKey } from "@/lib/dates";
+import {
+  formatBengaliMonth,
+  formatBengaliNumericDate,
+  toBengaliDigits,
+  todayKey,
+  type MonthKey,
+} from "@/lib/dates";
 import { formatTakaBengali } from "@/lib/money";
 
 export interface LedgerRowView {
@@ -145,8 +151,7 @@ export function LedgerSheet({
       </table>
 
       <div className={styles.footer}>
-        <span>স্বাক্ষর: ____________________</span>
-        <span>তারিখ: ____________________</span>
+        <span>তারিখ: {formatBengaliNumericDate(todayKey())}</span>
       </div>
       <div className={styles.legend}>
         ঋণাত্মক (লাল) সংখ্যা মানে সদস্যের জমা খরচের চেয়ে কম — টাকা বাকি আছে।

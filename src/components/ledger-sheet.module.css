@@ -90,7 +90,7 @@
 .footer {
   margin-top: 10px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   font-size: 11px;
   color: #444444;
 }

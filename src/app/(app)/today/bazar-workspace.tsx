@@ -124,6 +124,37 @@ export function BazarWorkspace({
     : 0;
 
   const displayExtraAmount = extraAmount + pendingRecurringAmount;
+  const displayExtraItems = showPendingRecurring
+    ? [
+        ...totals.extraItems,
+        ...(pendingDailyExtra > 0
+          ? [
+              {
+                id: `pending-daily-extra-${date}`,
+                date,
+                label: "Daily recurring Extra",
+                amount: pendingDailyExtra,
+                category: "RECURRING_DAILY" as const,
+                showInDailyBudget: true,
+                voided: false,
+              },
+            ]
+          : []),
+        ...(pendingManagerFee > 0
+          ? [
+              {
+                id: `pending-manager-fee-${date}`,
+                date,
+                label: "Manager's daily fee",
+                amount: pendingManagerFee,
+                category: "MANAGER_FEE" as const,
+                showInDailyBudget: true,
+                voided: false,
+              },
+            ]
+          : []),
+      ]
+    : totals.extraItems;
   const computedChange = advance - expense;
   const changeReturned = manualChange ?? computedChange;
   const totalBudget = totals.mealsSubtotal + displayExtraAmount - deduction;
@@ -248,19 +279,13 @@ export function BazarWorkspace({
               amount={totals.sehriAmount}
             />
           ) : null}
-          <Line
-            label="Extra"
-            detail={
-              showPendingRecurring && pendingRecurringAmount > 0
-                ? `${formatTaka(pendingDailyExtra)} daily Extra + ${formatTaka(
-                    pendingManagerFee,
-                  )} manager fee`
-                : budgetExtras.length > 0
-                  ? budgetExtras.map((item) => item.label).join(" + ")
-                  : "nothing flagged for today"
-            }
-            amount={displayExtraAmount}
-          />
+          {displayExtraItems.length > 0 ? (
+            displayExtraItems.map((item) => (
+              <Line key={item.id} label={item.label} amount={item.amount} />
+            ))
+          ) : (
+            <Line label="Extra" detail="nothing flagged for today" amount={0} />
+          )}
           {deduction > 0 ? (
             <Line
               label="Deduction"
@@ -421,6 +446,9 @@ export function BazarWorkspace({
                   id="deductionReason"
                   name="deductionReason"
                   value={reason}
+                  required={deduction > 0}
+                  aria-invalid={deduction > 0 && !reason.trim()}
+                  aria-describedby="deductionReason-help"
                   onChange={(event) => setReason(event.target.value)}
                   placeholder="e.g. Khala took money for masala"
                   className={cn(
@@ -429,6 +457,9 @@ export function BazarWorkspace({
                       "border-red-400 text-red-700 placeholder:text-red-400",
                   )}
                 />
+                <p id="deductionReason-help" className="text-[11px] text-muted-foreground">
+                  Required only when the deduction amount is above 0.
+                </p>
               </div>
             </div>
 
@@ -643,7 +674,13 @@ export function BazarWorkspace({
             dutyRoomNumbers={dutyRoomNumbers}
             khalaDidShopping={khalaDidShopping}
             rooms={rooms}
-            totals={{ ...totals, extraAmount: displayExtraAmount, totalBudget, deductionAmount: deduction }}
+            totals={{
+              ...totals,
+              extraItems: displayExtraItems,
+              extraAmount: displayExtraAmount,
+              totalBudget,
+              deductionAmount: deduction,
+            }}
             deductionReason={reason || null}
             advanceGiven={advance}
             actualExpense={expense}

@@ -170,13 +170,29 @@ export function BazarSlip({
 
             <div className={styles.moneyDivider} />
 
-            <div className={styles.moneyRow}>
-              <span className={styles.moneyLabel}>অতিরিক্ত</span>
-              <span className={styles.moneyFormula} />
-              <span className={styles.moneyAmount}>
-                +{formatTakaBengali(totals.extraAmount)}
-              </span>
-            </div>
+            {totals.extraItems.length > 0 ? (
+              totals.extraItems.map((item) => (
+                <div className={styles.moneyRow} key={item.id}>
+                  <span className={styles.moneyLabel}>
+                    {item.category === "RECURRING_DAILY"
+                      ? "দৈনিক অতিরিক্ত"
+                      : item.category === "MANAGER_FEE"
+                        ? "ম্যানেজারের দৈনিক ফি"
+                        : item.label}
+                  </span>
+                  <span className={styles.moneyFormula} />
+                  <span className={styles.moneyAmount}>
+                    +{formatTakaBengali(item.amount)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className={styles.moneyRow}>
+                <span className={styles.moneyLabel}>অতিরিক্ত</span>
+                <span className={styles.moneyFormula} />
+                <span className={styles.moneyAmount}>+{formatTakaBengali(0)}</span>
+              </div>
+            )}
 
             {totals.deductionAmount > 0 ? (
               <div className={`${styles.moneyRow} ${styles.deductionRow}`}>

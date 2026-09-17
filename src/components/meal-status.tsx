@@ -53,7 +53,7 @@ export const MEAL_STATUS_META: Record<
     short: "Off",
     hint: "Ate neither meal",
     Icon: Ban,
-    solid: "bg-muted text-muted-foreground",
+    solid: "bg-red-600 text-white",
     outline: "border-border text-muted-foreground bg-muted/50",
     text: "text-muted-foreground",
   },

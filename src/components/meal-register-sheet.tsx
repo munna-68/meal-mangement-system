@@ -33,6 +33,20 @@ const LEGEND: Array<{ code: string; label: string }> = [
   { code: "·", label: "বন্ধ" },
 ];
 
+const STATUS_CLASS: Record<MealStatus, string> = {
+  FULL: styles.codeFull,
+  HALF_DAY: styles.codeHalfDay,
+  HALF_NIGHT: styles.codeHalfNight,
+  OFF: styles.codeOff,
+};
+
+const LEGEND_CLASS: Record<string, string> = {
+  F: styles.legendFull,
+  D: styles.legendHalfDay,
+  N: styles.legendHalfNight,
+  "·": styles.legendOff,
+};
+
 function dayNumber(day: DateKey): string {
   return bn(String(Number(day.slice(8, 10))));
 }
@@ -62,7 +76,10 @@ export function MealRegisterSheet({
         <div className={styles.legend}>
           {LEGEND.map((entry) => (
             <span key={entry.code}>
-              <span className={styles.legendKey}>{entry.code}</span> = {entry.label}
+              <span className={`${styles.legendKey} ${LEGEND_CLASS[entry.code]}`}>
+                {entry.code}
+              </span>{" "}
+              = {entry.label}
             </span>
           ))}
         </div>
@@ -122,11 +139,10 @@ export function MealRegisterSheet({
                     </td>
                   );
                 }
-                const isOff = cell.status === "OFF";
                 return (
                   <td
                     key={cell.day}
-                    className={`${styles.code} ${isOff ? styles.codeOff : ""} ${
+                    className={`${styles.code} ${STATUS_CLASS[cell.status]} ${
                       cellIndex === 15 ? styles.blockStart : ""
                     }`}
                   >

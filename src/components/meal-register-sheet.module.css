@@ -55,8 +55,37 @@
 }
 
 .legendKey {
+  display: inline-flex;
+  min-width: 17px;
+  justify-content: center;
+  border-radius: 3px;
+  padding: 0 3px;
   font-weight: 700;
-  color: #111111;
+  color: #ffffff;
+}
+
+.legendFull,
+.codeFull {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.legendHalfDay,
+.codeHalfDay {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.legendHalfNight,
+.codeHalfNight {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.legendOff,
+.codeOff {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .table {
@@ -107,9 +136,11 @@
   font-size: 11px;
 }
 
+.table td.codeFull,
+.table td.codeHalfDay,
+.table td.codeHalfNight,
 .table td.codeOff {
-  color: #aaaaaa;
-  font-weight: 400;
+  font-weight: 800;
 }
 
 .table td.total {
