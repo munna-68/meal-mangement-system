@@ -17,18 +17,12 @@ import {
   monthStart,
   todayKey,
 } from "@/lib/dates";
+import { roomTypeLabel } from "@/lib/room-type";
 import { requireSession } from "@/server/auth";
 import { getBazarDutiesInRange, getRooms, getSettingsOrDefaults } from "@/server/queries";
 import { RosterBoard, type RosterDay } from "./roster-board";
 
 export const metadata: Metadata = { title: "Bazar Roster" };
-
-function roomTypeLabel(capacity: number): string {
-  if (capacity <= 1) return "single";
-  if (capacity === 2) return "double";
-  if (capacity === 3) return "triple";
-  return `${capacity} beds`;
-}
 
 export default async function RosterPage(props: PageProps<"/roster">) {
   await requireSession();
@@ -124,7 +118,7 @@ export default async function RosterPage(props: PageProps<"/roster">) {
         rooms={rooms.map((room) => ({
           id: room.id,
           number: room.number,
-          typeLabel: roomTypeLabel(room.capacity),
+          typeLabel: roomTypeLabel(room),
         }))}
       />
 

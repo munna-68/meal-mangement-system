@@ -37,6 +37,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  parseRoomTypeValue,
+  roomTypeDescription,
+  roomTypeLabel,
+  roomTypeValue,
+  ROOM_TYPES,
+} from "@/lib/room-type";
+import {
   createMember,
   createRoom,
   deleteMember,
@@ -45,18 +52,11 @@ import {
   updateRoom,
 } from "@/server/actions/people";
 
-/** 1/2/3 beds are shown as room types rather than raw capacity. */
-function roomTypeLabel(capacity: number): string {
-  if (capacity <= 1) return "single";
-  if (capacity === 2) return "double";
-  if (capacity === 3) return "triple";
-  return `${capacity} beds`;
-}
-
 export interface RoomRecord {
   id: string;
   number: string;
   capacity: number;
+  solo: boolean;
   notes: string | null;
   occupants: number;
 }
@@ -131,13 +131,26 @@ export function MembersClient({
                 <tr key={room.id} className="border-t">
                   <td className="px-4 py-2 font-medium">{room.number}</td>
                   <td className="px-4 py-2 capitalize">
-                    {roomTypeLabel(room.capacity)}
+                    {roomTypeLabel(room)}
                   </td>
                   <td className="px-4 py-2">
                     {room.occupants}
+                    {/* The live fact (nobody else in the room), as opposed to
+                        the room's declared type in the column above. */}
                     {room.capacity >= 2 && room.occupants === 1 ? (
-                      <Badge variant="outline" className="ml-2 border-amber-400 text-amber-700">
-                        solo
+                      <Badge
+                        variant="outline"
+                        className="ml-2 border-amber-400 text-amber-700"
+                      >
+                        alone
+                      </Badge>
+                    ) : null}
+                    {room.capacity >= 2 && room.occupants === 0 && room.solo ? (
+                      <Badge
+                        variant="outline"
+                        className="ml-2 border-amber-400 text-amber-700"
+                      >
+                        empty
                       </Badge>
                     ) : null}
                     {room.occupants > room.capacity ? (
@@ -407,8 +420,13 @@ function RoomDialog({
 }) {
   const { run, pending, error } = useAction();
   const [number, setNumber] = useState(room?.number ?? "");
-  const [capacity, setCapacity] = useState(String(room?.capacity ?? 2));
+  const [roomType, setRoomType] = useState(
+    roomTypeValue({ capacity: room?.capacity ?? 2, solo: room?.solo }),
+  );
   const [notes, setNotes] = useState(room?.notes ?? "");
+  // Guarded here as well as on the server so the dropdown can never show an
+  // impossible pairing; `parseRoomTypeValue` drops the flag on a single.
+  const roomTypeParsed = parseRoomTypeValue(roomType) ?? { capacity: 2, solo: false };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -416,9 +434,11 @@ function RoomDialog({
         <DialogHeader>
           <DialogTitle>{room ? "Edit room" : "Add room"}</DialogTitle>
           <DialogDescription>
-            The room type decides how many people share it. A member alone in a
-            double or triple room is treated as solo: they pay the solo Khala
-            rate and the solo electricity share.
+            The room type decides how the shared bills are split. A special room
+            is a double or triple let out to one person. Anyone alone in a double
+            or triple is billed as solo &mdash; the solo Khala rate and the solo
+            electricity share &mdash; and a second person moving in turns a
+            special room back into an ordinary shared one.
           </DialogDescription>
         </DialogHeader>
 
@@ -433,20 +453,26 @@ function RoomDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="room-capacity">Room type</Label>
-            <Select value={capacity} onValueChange={setCapacity}>
-              <SelectTrigger id="room-capacity" className="w-full">
+            <Label htmlFor="room-type">Room type</Label>
+            <Select value={roomType} onValueChange={setRoomType}>
+              <SelectTrigger id="room-type" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">Single — 1 person</SelectItem>
-                <SelectItem value="2">Double — 2 people</SelectItem>
-                <SelectItem value="3">Triple — 3 people</SelectItem>
+                {ROOM_TYPES.map((type) => (
+                  <SelectItem
+                    key={roomTypeValue(type)}
+                    value={roomTypeValue(type)}
+                  >
+                    {roomTypeDescription(type)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
-              A room is &ldquo;solo&rdquo; when it has two or more beds but only
-              one person living in it.
+              {roomTypeParsed.solo
+                ? "Special: one person takes the whole room. They pay the solo Khala rate and the solo electricity share while they are the only one in it."
+                : "A member alone in a double or triple is billed as solo automatically, even if the room is not marked special."}
             </p>
           </div>
           <div className="flex flex-col gap-2">
@@ -473,10 +499,10 @@ function RoomDialog({
                     ? updateRoom({
                         id: room.id,
                         number,
-                        capacity: Number(capacity),
+                        ...roomTypeParsed,
                         notes,
                       })
-                    : createRoom({ number, capacity: Number(capacity), notes }),
+                    : createRoom({ number, ...roomTypeParsed, notes }),
                 { onSuccess: () => onOpenChange(false) },
               )
             }
@@ -547,7 +573,7 @@ function MemberDialog({
               <SelectContent>
                 {rooms.map((room) => (
                   <SelectItem key={room.id} value={room.id}>
-                    Room {room.number} ({roomTypeLabel(room.capacity)})
+                    Room {room.number} ({roomTypeLabel(room)})
                   </SelectItem>
                 ))}
               </SelectContent>

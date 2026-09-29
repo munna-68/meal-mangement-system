@@ -62,6 +62,8 @@ export interface RoomRow {
   id: string;
   number: string;
   capacity: number;
+  /** Let out whole to one person — a "special" room. */
+  solo: boolean;
   notes: string | null;
 }
 
@@ -114,6 +116,7 @@ export async function getRooms(): Promise<RoomRow[]> {
       id: rooms.id,
       number: rooms.number,
       capacity: rooms.capacity,
+      solo: rooms.solo,
       notes: rooms.notes,
     })
     .from(rooms)

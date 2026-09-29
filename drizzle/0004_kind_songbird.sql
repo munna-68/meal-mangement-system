@@ -1,0 +1,1 @@
+ALTER TABLE "rooms" ADD COLUMN "solo" boolean DEFAULT false NOT NULL;

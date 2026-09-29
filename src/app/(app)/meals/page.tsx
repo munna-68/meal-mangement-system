@@ -35,6 +35,7 @@ export default async function MealsPage(props: PageProps<"/meals">) {
       id: room.id,
       number: room.number,
       capacity: room.capacity,
+      solo: room.solo,
       members: snapshot.members
         .filter((member) => member.roomId === room.id && member.active)
         .sort((a, b) => a.name.localeCompare(b.name))

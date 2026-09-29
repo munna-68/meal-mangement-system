@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { members, rooms } from "@/db/schema";
 import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
 import { todayKey } from "@/lib/dates";
+import { roomTypeLabel } from "@/lib/room-type";
 import { requireSession } from "@/server/auth";
 import { recordAudit } from "@/server/audit";
 import { getMemberHistoryLosses } from "@/server/queries";
@@ -15,8 +16,32 @@ import { getMemberHistoryLosses } from "@/server/queries";
 const roomSchema = z.object({
   number: z.string().trim().min(1, "Room number is required").max(32),
   capacity: z.coerce.number().int().min(1).max(10),
+  /**
+   * Set for a multi-bed room that is let out whole to one person. Refined
+   * against `capacity` below, so a special flag can never be stored against a
+   * single, where "alone in a shared room" cannot apply.
+   */
+  solo: z.boolean().optional().default(false),
   notes: z.string().max(300).optional(),
+}).superRefine((data, ctx) => {
+  if (data.solo && data.capacity < 2) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["solo"],
+      message:
+        "Only a double or triple room can be special — a single has nobody to share with",
+    });
+  }
 });
+
+/** Audit wording that names the room type the manager actually chose. */
+function roomSummary(
+  verb: "Added" | "Updated",
+  number: string,
+  room: { capacity: number; solo: boolean },
+): string {
+  return `${verb} room ${number} (${roomTypeLabel(room)})`;
+}
 
 export async function createRoom(
   input: z.infer<typeof roomSchema>,
@@ -32,6 +57,7 @@ export async function createRoom(
         .values({
           number: parsed.data.number.trim(),
           capacity: parsed.data.capacity,
+          solo: parsed.data.solo,
           notes: parsed.data.notes?.trim() || null,
         })
         .returning({ id: rooms.id });
@@ -42,8 +68,8 @@ export async function createRoom(
           action: "room.create",
           entityType: "room",
           entityId: created?.id ?? parsed.data.number.trim(),
-          summary: `Added room ${parsed.data.number.trim()} (capacity ${parsed.data.capacity})`,
-          detail: { capacity: parsed.data.capacity },
+          summary: roomSummary("Added", parsed.data.number.trim(), parsed.data),
+          detail: { capacity: parsed.data.capacity, solo: parsed.data.solo },
         },
         tx,
       );
@@ -71,6 +97,7 @@ export async function updateRoom(
         .set({
           number: parsed.data.number.trim(),
           capacity: parsed.data.capacity,
+          solo: parsed.data.solo,
           notes: parsed.data.notes?.trim() || null,
         })
         .where(eq(rooms.id, input.id));
@@ -81,8 +108,8 @@ export async function updateRoom(
           action: "room.update",
           entityType: "room",
           entityId: input.id,
-          summary: `Updated room ${parsed.data.number.trim()} (capacity ${parsed.data.capacity})`,
-          detail: { capacity: parsed.data.capacity },
+          summary: roomSummary("Updated", parsed.data.number.trim(), parsed.data),
+          detail: { capacity: parsed.data.capacity, solo: parsed.data.solo },
         },
         tx,
       );

@@ -141,6 +141,18 @@ export const rooms = pgTable("rooms", {
   id: uuid("id").primaryKey().defaultRandom(),
   number: varchar("number", { length: 32 }).notNull().unique(),
   capacity: integer("capacity").notNull(),
+  /**
+   * A "special" room: a multi-bed room that is let out to a single person, so
+   * that one person carries the whole room. Recorded rather than guessed, so
+   * the room keeps its identity in the roster, reports and exports instead of
+   * looking like an ordinary double/triple.
+   *
+   * It only ever describes the arrangement, never overrides who is actually
+   * living there: the solo Khala rate and solo utility share still apply while
+   * the room holds at most one person, and it becomes an ordinary shared room
+   * again as soon as a second person moves in. See `isSoloInSharedRoom`.
+   */
+  solo: boolean("solo").notNull().default(false),
   notes: text("notes"),
   createdAt: createdAt(),
 });

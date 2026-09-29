@@ -43,7 +43,24 @@ export interface BoardRoom {
   id: string;
   number: string;
   capacity: number;
+  /** Let out whole to one person — a "special" room. */
+  solo?: boolean;
   members: BoardMember[];
+}
+
+/**
+ * One note per room covering both the declared type and how the room is
+ * actually billed, so the two never appear as two competing badges. A special
+ * room is only solo-billed while it actually holds one person, which is the
+ * part worth flagging.
+ */
+function roomTypeNote(room: BoardRoom): string | null {
+  const special = !!room.solo && room.capacity >= 2;
+  const alone = room.members.length === 1 && room.capacity >= 2;
+  if (special && alone) return "Special room — solo Khala rate";
+  if (special) return "Special room — shared";
+  if (alone) return "Solo — solo Khala rate";
+  return null;
 }
 
 type Patch =
@@ -204,9 +221,9 @@ export function MealBoard({
               <span className="text-xs text-muted-foreground">
                 {room.members.length}/{room.capacity}
               </span>
-              {room.members.length === 1 && room.capacity >= 2 ? (
+              {roomTypeNote(room) ? (
                 <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
-                  Solo — solo Khala rate
+                  {roomTypeNote(room)}
                 </span>
               ) : null}
             </div>

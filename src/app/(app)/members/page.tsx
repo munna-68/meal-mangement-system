@@ -24,6 +24,7 @@ export default async function MembersPage() {
     id: room.id,
     number: room.number,
     capacity: room.capacity,
+    solo: room.solo,
     notes: room.notes,
     occupants: members.filter((member) => member.roomId === room.id && member.active)
       .length,

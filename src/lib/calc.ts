@@ -53,6 +53,8 @@ export interface RoomData {
   id: string;
   number: string;
   capacity: number;
+  /** Let out whole to one person. Absent on older callers, treated as false. */
+  solo?: boolean;
 }
 
 export interface MemberData {
@@ -687,6 +689,8 @@ export function memberDayStates(input: {
 export interface RoomOccupancy {
   roomId: string;
   capacity: number;
+  /** Room is let out whole to one person — a "special" room. */
+  solo: boolean;
   occupants: number;
   hasActiveMember: boolean;
 }
@@ -704,6 +708,7 @@ export function occupancyForRange(input: {
     map.set(room.id, {
       roomId: room.id,
       capacity: room.capacity,
+      solo: room.solo ?? false,
       occupants: 0,
       hasActiveMember: false,
     });
@@ -738,6 +743,14 @@ export interface UtilityApportionment {
  * A member counts as "solo" when they are the only occupant of a room with two
  * or more beds. That single condition drives both the higher Khala rate and the
  * solo utility multipliers, so it lives in one place.
+ *
+ * `room.solo` records that the room is let out whole to one person. It is kept
+ * deliberately out of the arithmetic: a special room still has to be *alone* to
+ * bill as solo, so a second person moving in turns it back into an ordinary
+ * shared room rather than leaving one person charged for a whole double room
+ * that is now shared. Ordinary multi-bed rooms with a single occupant continue
+ * to bill as solo, which is what makes an unfilled double expensive for the
+ * person in it.
  */
 export function isSoloInSharedRoom(room: RoomOccupancy | undefined): boolean {
   return !!room && room.capacity >= 2 && room.occupants <= 1;

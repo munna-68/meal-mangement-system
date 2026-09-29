@@ -11,6 +11,7 @@ import {
   computeMonth,
   computeRunningBalances,
   extraPoolForRange,
+  isSoloInSharedRoom,
   khalaAmountFor,
   occupancyForRange,
   rateCardFor,
@@ -47,6 +48,12 @@ import {
   passwordProblem,
 } from "../src/lib/password-policy";
 import { buildDutyUnits, orderUnitsFrom } from "../src/lib/roster";
+import {
+  parseRoomTypeValue,
+  roomTypeLabel,
+  roomTypeValue,
+  ROOM_TYPES,
+} from "../src/lib/room-type";
 import {
   parseAmountCell,
   parseCsvImport,
@@ -1652,6 +1659,139 @@ section("Password policy and solo wifi toggle");
     "the toggle does not touch electricity",
     doubleWifi.perMember.get("m3")!.electricityAmount,
     singleWifi.perMember.get("m3")!.electricityAmount,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Special ("solo") rooms — a multi-bed room let out whole to one person
+// ---------------------------------------------------------------------------
+
+section("Special rooms");
+{
+  // A special double: one person has the whole room.
+  const specialRooms: RoomData[] = [
+    { id: "A", number: "101", capacity: 2, solo: true },
+    { id: "B", number: "102", capacity: 2, solo: false },
+  ];
+  const oneAlone = [
+    member("m1", "A", { joinDate: "2025-03-01" }),
+    member("m2", "B", { joinDate: "2025-03-01" }),
+    member("m3", "C", { joinDate: "2025-03-01" }),
+  ];
+  const occ = (rooms: RoomData[], members: MemberData[]) =>
+    occupancyForRange({
+      members,
+      rooms,
+      from: "2025-03-01",
+      to: "2025-03-31",
+      today: "2025-03-31",
+    });
+
+  const aloneInEach = occ(specialRooms, oneAlone);
+  check(
+    "a special double with one person is solo",
+    isSoloInSharedRoom(aloneInEach.get("A")),
+    true,
+  );
+  check(
+    "a plain double with one person is solo too",
+    isSoloInSharedRoom(aloneInEach.get("B")),
+    true,
+  );
+
+  // The decisive rule: the designation describes the arrangement, it does not
+  // force solo billing. A second person moving in turns the special room into an
+  // ordinary shared room rather than charging one person for a whole double.
+  const twoInSpecial = occ(
+    specialRooms,
+    [...oneAlone, member("m4", "A", { joinDate: "2025-03-15" })],
+  );
+  check(
+    "a special room becomes an ordinary shared room once a second person moves in",
+    isSoloInSharedRoom(twoInSpecial.get("A")),
+    false,
+  );
+  check(
+    "the other single-occupant room is still solo",
+    isSoloInSharedRoom(twoInSpecial.get("B")),
+    true,
+  );
+
+  // A one-bed room is never "alone in a shared room", designated or not.
+  const singleRoom = occ(
+    [{ id: "A", number: "101", capacity: 1, solo: true }],
+    [member("m1", "A", { joinDate: "2025-03-01" })],
+  );
+  check(
+    "a single room is never solo even if flagged",
+    isSoloInSharedRoom(singleRoom.get("A")),
+    false,
+  );
+
+  // The designation must reach the money: a special room and a plain double
+  // holding the same single person cost the same, because both are alone.
+  const specialBase = {
+    month: "2025-03",
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [] as GuestMealData[],
+    extras: [] as ExtraItemData[],
+    bills: BILLS,
+    rateCards: [RATE_CARD],
+    today: "2025-03-31",
+  };
+  const soloMember = [member("m3", "A", { joinDate: "2025-03-01" })];
+  const sharedMember = [member("m3", "B", { joinDate: "2025-03-01" })];
+  const specialCost = computeMonth({
+    ...specialBase,
+    members: soloMember,
+    rooms: [{ id: "A", number: "101", capacity: 2, solo: true }],
+  });
+  const plainCost = computeMonth({
+    ...specialBase,
+    members: sharedMember,
+    rooms: [{ id: "B", number: "102", capacity: 2, solo: false }],
+  });
+  check(
+    "a special room alone is billed the same as any alone double",
+    specialCost.perMember.get("m3")!.totalCost,
+    plainCost.perMember.get("m3")!.totalCost,
+  );
+  check(
+    "a special room alone pays the solo khala rate",
+    specialCost.perMember.get("m3")!.khalaAmount,
+    RATE_CARD.khalaSoloRate,
+  );
+
+  // The room type label is what the manager picks from, so it has to round-trip.
+  check(
+    "a special double round-trips through the form value",
+    parseRoomTypeValue(roomTypeValue({ capacity: 2, solo: true })),
+    { capacity: 2, solo: true },
+  );
+  check(
+    "a plain double round-trips through the form value",
+    parseRoomTypeValue(roomTypeValue({ capacity: 2, solo: false })),
+    { capacity: 2, solo: false },
+  );
+  check(
+    "a single never round-trips as special",
+    parseRoomTypeValue(roomTypeValue({ capacity: 1, solo: true })),
+    { capacity: 1, solo: false },
+  );
+  check(
+    "a special double is labelled as such",
+    roomTypeLabel({ capacity: 2, solo: true }),
+    "solo double",
+  );
+  check(
+    "a plain triple keeps its plain label",
+    roomTypeLabel({ capacity: 3, solo: false }),
+    "triple",
+  );
+  check(
+    "the dropdown offers the special types",
+    ROOM_TYPES.map(roomTypeValue),
+    ["1", "2", "3", "2-solo", "3-solo"],
   );
 }
 

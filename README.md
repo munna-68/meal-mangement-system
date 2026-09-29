@@ -139,14 +139,29 @@ Guarantees worth knowing:
 
 ### "Solo" members
 
-A member is solo when they are the only occupant of a room with two or more beds,
-which is derived from the room type and how many people live there — it is never
-set by hand, so it can never disagree with reality. It affects two things:
+A member is solo when they are the only occupant of a room with two or more beds.
+It affects two things:
 
 - **Khala** — they pay the solo rate instead of the normal rate (Rate Card).
 - **Utilities** — electricity and wifi are split evenly across every active
   member, then a solo member's share is multiplied. The multiples are on Mess
   Settings and default to **electricity ×2, wifi ×1**.
+
+The condition itself is always derived from who is actually living where, so it
+cannot disagree with reality.
+
+### Special rooms
+
+A room's type is two facts: how many beds it has, and whether it is **special** —
+a double or triple let out whole to one person. Special is recorded on the room
+rather than guessed, so the room keeps its identity in the roster, the members
+list and exports instead of looking like an ordinary double.
+
+The designation describes the *arrangement*; it never overrides who is living
+there. A special room is billed as solo while it actually holds at most one
+person, and becomes an ordinary shared room as soon as a second person moves in.
+A plain double with a single occupant is likewise billed as solo, which is what
+makes an unfilled double expensive for the person in it.
 
 Because the solo member pays more than one equal share, the amounts collected can
 exceed the bills. That is the mess's rule, and it is asserted in the tests rather
