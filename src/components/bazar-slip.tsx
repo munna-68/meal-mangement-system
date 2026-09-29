@@ -229,7 +229,7 @@ export function BazarSlip({
 
           <div className={styles.cashBox}>
             <div className={styles.moneyRow}>
-              <span className={styles.moneyLabel}>বাজার খরচ</span>
+              <span className={styles.moneyLabel}>লক্ষ্য বাজেট</span>
               <span className={styles.moneyAmount}>
                 {formatTakaBengali(actualExpense)}
               </span>

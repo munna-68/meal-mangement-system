@@ -233,8 +233,6 @@ const bazarRecordSchema = z.object({
   deductionAmount: z.coerce.number().int().min(0).default(0),
   deductionReason: z.string().max(300).optional(),
   advanceGiven: z.coerce.number().int().min(0).default(0),
-  actualExpense: z.coerce.number().int().min(0).default(0),
-  changeReturned: z.coerce.number().int().optional(),
   menuNight: z.string().max(300).optional(),
   menuMorning: z.string().max(300).optional(),
   menuNoon: z.string().max(300).optional(),
@@ -295,8 +293,8 @@ export async function saveBazarRecord(
       today: snapshot.today,
     });
 
-    const changeReturned =
-      data.changeReturned ?? data.advanceGiven - data.actualExpense;
+    const actualExpense = totals.totalBudget;
+    const changeReturned = data.advanceGiven - actualExpense;
 
     const values = {
       date: data.date,
@@ -313,7 +311,7 @@ export async function saveBazarRecord(
       deductionAmount: data.deductionAmount,
       deductionReason: data.deductionReason?.trim() || null,
       advanceGiven: data.advanceGiven,
-      actualExpense: data.actualExpense,
+      actualExpense,
       changeReturned,
       menuNight: data.menuNight?.trim() || null,
       menuMorning: data.menuMorning?.trim() || null,
@@ -351,7 +349,7 @@ export async function saveBazarRecord(
             deductionReason: data.deductionReason?.trim() ?? null,
             extraAmount: totals.extraAmount,
             advanceGiven: data.advanceGiven,
-            actualExpense: data.actualExpense,
+            actualExpense,
             changeReturned,
             autoRowsCreated: pendingAutoRows.length,
           },
@@ -386,8 +384,6 @@ export async function saveBazarRecordForm(
     deductionAmount: num("deductionAmount") ?? 0,
     deductionReason: str("deductionReason"),
     advanceGiven: num("advanceGiven") ?? 0,
-    actualExpense: num("actualExpense") ?? 0,
-    changeReturned: num("changeReturned"),
     menuNight: str("menuNight"),
     menuMorning: str("menuMorning"),
     menuNoon: str("menuNoon"),

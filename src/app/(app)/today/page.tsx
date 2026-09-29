@@ -149,10 +149,6 @@ export default async function TodayPage(props: PageProps<"/today">) {
           deductionAmount: record?.deductionAmount ?? 0,
           deductionReason: record?.deductionReason ?? "",
           advanceGiven: record?.advanceGiven ?? 0,
-          actualExpense: record?.actualExpense ?? 0,
-          changeReturned:
-            record?.changeReturned ??
-            (record ? (record.advanceGiven ?? 0) - (record.actualExpense ?? 0) : 0),
           confirmed: record !== null,
         }}
         ramadanMode={snapshot.settings.ramadanMode}

@@ -8,7 +8,6 @@ import {
   ArrowRightIcon,
   CheckCircle2Icon,
   InfoIcon,
-  RotateCcwIcon,
 } from "lucide-react";
 
 import { cn } from "cn";
@@ -48,8 +47,6 @@ export interface BazarInitial {
   deductionAmount: number;
   deductionReason: string;
   advanceGiven: number;
-  actualExpense: number;
-  changeReturned: number;
   /** Whether a bazar record exists for this date — i.e. the day is confirmed. */
   confirmed: boolean;
 }
@@ -97,12 +94,6 @@ export function BazarWorkspace({
   const [deduction, setDeduction] = useState(initial.deductionAmount);
   const [reason, setReason] = useState(initial.deductionReason);
   const [advance, setAdvance] = useState(initial.advanceGiven);
-  const [expense, setExpense] = useState(initial.actualExpense);
-  const [manualChange, setManualChange] = useState<number | null>(
-    initial.changeReturned === initial.advanceGiven - initial.actualExpense
-      ? null
-      : initial.changeReturned,
-  );
 
   const budgetExtras = optimisticExtras.filter(
     (item) => item.date === date && item.showInDailyBudget && !item.voided,
@@ -158,9 +149,8 @@ export function BazarWorkspace({
           : []),
       ]
     : totals.extraItems;
-  const computedChange = advance - expense;
-  const changeReturned = manualChange ?? computedChange;
   const totalBudget = totals.mealsSubtotal + displayExtraAmount - deduction;
+  const changeReturned = advance - totalBudget;
   const isFuture = date > todayKey();
 
   async function confirmDay(): Promise<boolean> {
@@ -169,8 +159,6 @@ export function BazarWorkspace({
       deductionAmount: deduction,
       deductionReason: reason,
       advanceGiven: advance,
-      actualExpense: expense,
-      changeReturned: manualChange ?? undefined,
     });
     if (!result.ok) {
       toast.error(result.error ?? "Could not confirm the bazar");
@@ -507,52 +495,35 @@ export function BazarWorkspace({
                   }
                   className="h-10"
                 />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="actualExpense">Actual market expense</Label>
-                <Input
-                  id="actualExpense"
-                  name="actualExpense"
-                  type="number"
-                  min={0}
-                  inputMode="numeric"
-                  value={expense === 0 ? "" : expense}
-                  placeholder="0"
-                  onChange={(event) =>
-                    setExpense(Math.max(0, Number(event.target.value) || 0))
-                  }
-                  className="h-10"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="changeReturned">Change returned</Label>
-                  {manualChange !== null ? (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                      onClick={() => setManualChange(null)}
-                    >
-                      <RotateCcwIcon className="size-3" />
-                      recalculate
-                    </button>
-                  ) : null}
-                </div>
-                <Input
-                  id="changeReturned"
-                  name="changeReturned"
-                  type="number"
-                  inputMode="numeric"
-                  value={changeReturned}
-                  onChange={(event) =>
-                    setManualChange(Number(event.target.value) || 0)
-                  }
-                  className="h-10"
-                />
                 <p className="text-[11px] text-muted-foreground">
-                  {manualChange === null
-                    ? "Advance − expense, corrected by hand if cash was rounded."
-                    : "Manually corrected."}
+                  The cash you hand the shopper.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="targetBudget">Target budget</Label>
+                <div
+                  id="targetBudget"
+                  className="flex h-10 items-center rounded-lg border bg-muted/40 px-3 text-sm font-medium tabular-nums"
+                >
+                  {formatTaka(totalBudget)}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  From the meal board and extras. What the bazar costs.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="changeReturned">Change returned</Label>
+                <div
+                  id="changeReturned"
+                  className={cn(
+                    "flex h-10 items-center rounded-lg border bg-muted/40 px-3 text-sm font-medium tabular-nums",
+                    changeReturned < 0 && "text-red-700",
+                  )}
+                >
+                  {formatTaka(changeReturned)}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Advance − target budget, worked out for you.
                 </p>
               </div>
             </div>
@@ -560,7 +531,7 @@ export function BazarWorkspace({
             <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
               <span>Advance {formatTaka(advance)}</span>
               <ArrowRightIcon className="size-3.5 text-muted-foreground" />
-              <span>Spent {formatTaka(expense)}</span>
+              <span>Target budget {formatTaka(totalBudget)}</span>
               <ArrowRightIcon className="size-3.5 text-muted-foreground" />
               <span
                 className={cn(
@@ -572,7 +543,7 @@ export function BazarWorkspace({
               </span>
               {changeReturned < 0 ? (
                 <span className="text-xs font-medium text-red-700">
-                  (the shopper spent more than the advance)
+                  (the advance does not cover the target budget)
                 </span>
               ) : null}
             </div>
@@ -710,7 +681,7 @@ export function BazarWorkspace({
             }}
             deductionReason={reason || null}
             advanceGiven={advance}
-            actualExpense={expense}
+            actualExpense={totalBudget}
             changeReturned={changeReturned}
             ramadanMode={ramadanMode}
           />
