@@ -107,6 +107,16 @@ export interface SettlementData {
   closingBalance: number;
 }
 
+/**
+ * A manager-declared opening balance: the position a member started a given
+ * month with. Signed — positive is credit, negative is an existing debt.
+ */
+export interface OpeningBalanceData {
+  memberId: string;
+  month: MonthKey;
+  amount: number;
+}
+
 export interface MemberStatusOnDay {
   status: MealStatus;
   sehri: boolean;
@@ -1244,6 +1254,8 @@ export function computeRunningBalances(input: {
   rateCards: RateCardData[];
   deposits: DepositData[];
   settlements: SettlementData[];
+  /** Manager-declared opening balances, used to seed the first open month. */
+  openingBalances: OpeningBalanceData[];
   lastClosedMonth: MonthKey | null;
   ramadanMode?: boolean;
   soloElectricityMultiplier?: number;
@@ -1260,19 +1272,13 @@ export function computeRunningBalances(input: {
     rateCards,
     deposits,
     settlements,
+    openingBalances,
     lastClosedMonth,
     ramadanMode = false,
     soloElectricityMultiplier = 2,
     soloWifiMultiplier = 1,
     today = todayKey(),
   } = input;
-
-  const openingBalances = new Map<string, number>();
-  for (const settlement of settlements) {
-    if (lastClosedMonth && settlement.month === lastClosedMonth) {
-      openingBalances.set(settlement.memberId, settlement.closingBalance);
-    }
-  }
 
   // The open period starts the day after the last closed month. When nothing
   // has been closed yet, it starts at the earliest month with any activity, so
@@ -1292,6 +1298,27 @@ export function computeRunningBalances(input: {
       );
 
   const periodEnd = today;
+
+  // Opening balance for the open period, per member:
+  //   1. carry-forward — the last closed month's closing balance, when one exists;
+  //   2. otherwise (or when explicitly overridden) a manager-declared opening
+  //      balance for the *first* month of the open period.
+  //
+  // A declared opening is only ever applied to the first open month. Applying
+  // it to a later month would double-count, because the running figures below
+  // already roll each month forward through its own deposits and cost.
+  const firstOpenMonth = monthOf(periodStart);
+  const openingByMember = new Map<string, number>();
+  for (const settlement of settlements) {
+    if (lastClosedMonth && settlement.month === lastClosedMonth) {
+      openingByMember.set(settlement.memberId, settlement.closingBalance);
+    }
+  }
+  for (const opening of openingBalances) {
+    if (opening.month === firstOpenMonth) {
+      openingByMember.set(opening.memberId, opening.amount);
+    }
+  }
 
   const costByMember = new Map<string, number>();
   if (compare(periodStart, periodEnd) <= 0) {
@@ -1327,7 +1354,7 @@ export function computeRunningBalances(input: {
   }
 
   const rows: MemberRunningBalance[] = members.map((member) => {
-    const openingBalance = openingBalances.get(member.id) ?? 0;
+    const openingBalance = openingByMember.get(member.id) ?? 0;
     const memberDeposits = sum(
       deposits
         .filter(

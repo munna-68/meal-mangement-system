@@ -125,12 +125,14 @@ export async function closeMonth(
       today: snapshot.today,
     });
 
-    // Opening balances come from the month immediately before this one — never
-    // from "the most recent closed month we can find".
+    // Opening balances come from a manager-declared opening balance for this
+    // month when one exists, otherwise from the immediately preceding month's
+    // closing balance — never from "the most recent closed month we can find".
     const openingBalances = openingBalancesFor({
       month,
       closedMonths,
       settlements: snapshot.settlements,
+      openingBalances: snapshot.openingBalances,
     });
 
     const rows = buildSettlementRows({

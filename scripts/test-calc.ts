@@ -47,6 +47,13 @@ import {
   passwordProblem,
 } from "../src/lib/password-policy";
 import { buildDutyUnits, orderUnitsFrom } from "../src/lib/roster";
+import {
+  parseAmountCell,
+  parseCsvImport,
+  parseCsvRecords,
+  parseDateCell,
+  resolveMember,
+} from "../src/lib/import-csv";
 
 let passed = 0;
 const failures: string[] = [];
@@ -586,6 +593,7 @@ section("Running balance (month-to-date)");
     rateCards: [RATE_CARD],
     deposits,
     settlements: [],
+    openingBalances: [],
     lastClosedMonth: null,
     today: "2025-03-20",
   });
@@ -636,6 +644,7 @@ section("Running balance after a closed month");
       { memberId: "m3", month: "2025-03", openingBalance: 0, closingBalance: -2235 },
       { memberId: "m4", month: "2025-03", openingBalance: 0, closingBalance: -2835 },
     ],
+    openingBalances: [],
     lastClosedMonth: "2025-03",
     today: "2025-04-05",
   });
@@ -914,6 +923,7 @@ section("Open period starts where the data starts");
     rateCards: [RATE_CARD],
     deposits: [],
     settlements: [],
+    openingBalances: [],
     lastClosedMonth: null,
     today: "2025-03-05",
   });
@@ -1220,6 +1230,7 @@ section("Settlement sequencing");
     month: "2025-03",
     closedMonths: closedMonthSet(["2025-01", "2025-02"]),
     settlements,
+    openingBalances: [],
   });
   check(
     "opening balances come from the immediately preceding month",
@@ -1235,12 +1246,18 @@ section("Settlement sequencing");
       month: "2025-03",
       closedMonths: closedMonthSet(["2025-01"]),
       settlements,
+      openingBalances: [],
     }).size,
     0,
   );
   check(
     "the first month of the ledger opens at zero",
-    openingBalancesFor({ month: "2025-01", closedMonths: nothingClosed, settlements }).size,
+    openingBalancesFor({
+      month: "2025-01",
+      closedMonths: nothingClosed,
+      settlements,
+      openingBalances: [],
+    }).size,
     0,
   );
 
@@ -1261,6 +1278,270 @@ section("Settlement sequencing");
     laterClosedMonthsFor("2025-04", closedMonthSet(["2025-01", "2025-02"])),
     [],
   );
+}
+
+// ---------------------------------------------------------------------------
+// Declared opening balances (the "first month" seed)
+// ---------------------------------------------------------------------------
+
+section("Declared opening balance seeds the first open month");
+{
+  const settlements = [
+    { memberId: "m1", month: "2025-03", openingBalance: 0, closingBalance: 2165 },
+  ];
+
+  // Bootstrap: nothing closed yet, so there is nothing to carry. A declared
+  // opening becomes the authoritative start-of-month position.
+  const bootstrap = computeRunningBalances({
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: MARCH_EXTRAS,
+    bills: BILLS,
+    rateCards: [RATE_CARD],
+    deposits: [{ memberId: "m1", date: "2025-03-02", amount: 5000 }],
+    settlements: [],
+    openingBalances: [{ memberId: "m1", month: "2025-03", amount: 900 }],
+    lastClosedMonth: null,
+    today: "2025-03-20",
+  });
+  const b1 = bootstrap.rows.find((r) => r.memberId === "m1")!;
+  const b2 = bootstrap.rows.find((r) => r.memberId === "m2")!;
+  check("declared opening is used when nothing is closed", b1.openingBalance, 900);
+  check(
+    "balance = opening + deposits - cost",
+    b1.balance,
+    900 + 5000 - (1200 + 194 + 242 + 375),
+  );
+  check("members without a declared opening still start at zero", b2.openingBalance, 0);
+
+  // Override: a closed month would otherwise carry 2165 forward; an explicit
+  // opening for the first open month replaces that carry.
+  const override = computeRunningBalances({
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [RATE_CARD],
+    deposits: [],
+    settlements,
+    openingBalances: [{ memberId: "m1", month: "2025-04", amount: 500 }],
+    lastClosedMonth: "2025-03",
+    today: "2025-04-05",
+  });
+  const o1 = override.rows.find((r) => r.memberId === "m1")!;
+  check("declared opening overrides the carried closing balance", o1.openingBalance, 500);
+  check("balance uses the overridden opening", o1.balance, 500 - (5 * 60 + 50));
+
+  // No double counting: a declared opening for a *later* month in the open
+  // period is ignored by the running total, which already rolls each month
+  // forward through its own deposits and cost.
+  const laterMonth = computeRunningBalances({
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [RATE_CARD],
+    deposits: [],
+    settlements: [],
+    openingBalances: [{ memberId: "m1", month: "2025-04", amount: 9999 }],
+    lastClosedMonth: null,
+    today: "2025-03-20",
+  });
+  const l1 = laterMonth.rows.find((r) => r.memberId === "m1")!;
+  check("an opening for a later month is not double counted", l1.openingBalance, 0);
+
+  // The month-close path must use the same precedence, so the figure shown
+  // today and the figure stored when the month is closed cannot disagree.
+  check(
+    "close path: a declared opening replaces the carried closing balance",
+    [
+      ...openingBalancesFor({
+        month: "2025-04",
+        closedMonths: closedMonthSet(["2025-03"]),
+        settlements,
+        openingBalances: [{ memberId: "m1", month: "2025-04", amount: 500 }],
+      }).entries(),
+    ],
+    [["m1", 500]],
+  );
+  check(
+    "close path: a declared opening applies with no prior close (bootstrap)",
+    [
+      ...openingBalancesFor({
+        month: "2025-01",
+        closedMonths: closedMonthSet([]),
+        settlements,
+        openingBalances: [{ memberId: "m2", month: "2025-01", amount: -250 }],
+      }).entries(),
+    ],
+    [["m2", -250]],
+  );
+
+  // Regression: the settlement page builds its preview by resolving openings
+  // here, while the balances dashboard resolves them inside
+  // `computeRunningBalances`. When `openingBalances` was an optional argument
+  // the page forgot to pass it, defaulted to `[]`, and previewed every opening
+  // as 0 while the dashboard showed the real figure — the two tabs disagreed.
+  // Feeding the same declared opening through both paths must agree.
+  const declaredOpenings = [
+    { memberId: "m1", month: "2025-01", amount: 900 },
+    { memberId: "m2", month: "2025-01", amount: -250 },
+  ];
+  const BOOTSTRAP_MEMBERS: MemberData[] = [
+    member("m1", "A", { joinDate: "2025-01-01" }),
+    member("m2", "B", { joinDate: "2025-01-01" }),
+  ];
+  const BOOTSTRAP_ROOMS: RoomData[] = [ROOMS[0], ROOMS[1]];
+  const previewOpenings = openingBalancesFor({
+    month: "2025-01",
+    closedMonths: closedMonthSet([]),
+    settlements,
+    openingBalances: declaredOpenings,
+  });
+  const previewRows = buildSettlementRows({
+    computation: computeMonth({
+      month: "2025-01",
+      members: BOOTSTRAP_MEMBERS,
+      rooms: BOOTSTRAP_ROOMS,
+      changes: [],
+      guestMeals: [],
+      extras: [],
+      bills: [],
+      rateCards: [],
+      today: "2025-01-31",
+    }),
+    members: BOOTSTRAP_MEMBERS,
+    rooms: BOOTSTRAP_ROOMS,
+    deposits: [],
+    openingBalances: previewOpenings,
+  });
+  const dashboard = computeRunningBalances({
+    members: BOOTSTRAP_MEMBERS,
+    rooms: BOOTSTRAP_ROOMS,
+    changes: [],
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [],
+    deposits: [],
+    settlements,
+    openingBalances: declaredOpenings,
+    lastClosedMonth: null,
+    today: "2025-01-31",
+  });
+  check(
+    "settlement preview shows the same opening as the balance dashboard",
+    previewRows.map((row) => [row.memberId, row.openingBalance]).sort(),
+    dashboard.rows
+      .map((row) => [row.memberId, row.openingBalance])
+      .sort(),
+  );
+  check(
+    "settlement preview carries the declared opening for a bootstrap month",
+    previewRows.map((row) => row.openingBalance),
+    [900, -250],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CSV import parsing (paste-a-spreadsheet-to-bulk-add)
+// ---------------------------------------------------------------------------
+
+section("CSV import parsing");
+{
+  check(
+    "quoted fields, embedded commas and escaped quotes",
+    parseCsvRecords('a,"b,c",d\n"say ""hi""",e,f\n'),
+    [
+      ["a", "b,c", "d"],
+      ['say "hi"', "e", "f"],
+    ],
+  );
+  check("blank lines are dropped", parseCsvRecords("a,b\n\n\nc,d\n"), [
+    ["a", "b"],
+    ["c", "d"],
+  ]);
+
+  check("plain number", parseAmountCell("1500"), 1500);
+  check("comma grouping", parseAmountCell("1,200"), 1200);
+  check("taka sign", parseAmountCell("৳800"), 800);
+  check("currency suffix", parseAmountCell("1200 tk"), 1200);
+  check("parenthesised is negative", parseAmountCell("(250)"), -250);
+  check("leading minus", parseAmountCell("-40"), -40);
+  check("Bengali digits", parseAmountCell("৳১,৫০০"), 1500);
+  check("not a number", parseAmountCell("abc"), null);
+  check("empty", parseAmountCell("  "), null);
+
+  check("ISO date", parseDateCell("2025-03-05"), "2025-03-05");
+  check("day-first date", parseDateCell("5/3/2025"), "2025-03-05");
+  check("two-digit year", parseDateCell("05-03-25"), "2025-03-05");
+  check("impossible date", parseDateCell("2025-02-30"), null);
+  check("nonsense date", parseDateCell("soon"), null);
+
+  // Header-driven.
+  const withHeader = parseCsvImport(
+    "name,room,amount,date\nRahim,101,1500,2025-03-05\nKarim,102,1200\n",
+  );
+  check("header is detected", withHeader.headerDetected, true);
+  check("header rows parsed", withHeader.rows.map((r) => [r.name, r.room, r.amount, r.date]), [
+    ["Rahim", "101", 1500, "2025-03-05"],
+    ["Karim", "102", 1200, null],
+  ]);
+  check(
+    "a quoted grouped number is one amount",
+    parseCsvImport('name,room,amount\nKarim,102,"1,200"\n').rows[0].amount,
+    1200,
+  );
+  check(
+    "an unquoted grouped number split by the reader is refused, not guessed",
+    parseCsvImport("name,room,amount\nKarim,102,৳1,200\n").rows[0].problem,
+    "Amount may be split by a comma — re-paste as plain digits",
+  );
+
+  // Positional fallback with no header.
+  const positional = parseCsvImport("Rahim,101,1500\nKarim,102,1200\n");
+  check("no header falls back to name,room,amount", positional.headerDetected, false);
+  check(
+    "positional rows parsed",
+    positional.rows.map((r) => [r.name, r.room, r.amount]),
+    [
+      ["Rahim", "101", 1500],
+      ["Karim", "102", 1200],
+    ],
+  );
+
+  check(
+    "a bad amount is flagged, not thrown",
+    parseCsvImport("name,room,amount\nRahim,101,oops\n").rows[0].problem,
+    "Amount is not a number",
+  );
+  check("a missing name is flagged", parseCsvImport("name,amount\n,100\n").rows[0].problem, "No name");
+}
+
+// ---------------------------------------------------------------------------
+// CSV row → member matching
+// ---------------------------------------------------------------------------
+
+section("CSV row to member matching");
+{
+  const members = [
+    { id: "m1", name: "Rahim", roomNumber: "101" },
+    { id: "m2", name: "Karim", roomNumber: "102" },
+    { id: "m3", name: "Rahim", roomNumber: "103" },
+  ];
+
+  check("exact name match", resolveMember("Rahim", "", members), { ok: false, reason: "ambiguous", candidates: ["m1", "m3"] });
+  check("room breaks the tie", resolveMember("Rahim", "103", members), { ok: true, id: "m3" });
+  check("case and spacing are ignored", resolveMember("  karim ", "", members), { ok: true, id: "m2" });
+  check("unique name", resolveMember("Karim", "", members), { ok: true, id: "m2" });
+  check("unknown name", resolveMember("Nobody", "", members).ok, false);
+  check("blank name is not matched", resolveMember("", "101", members).ok, false);
 }
 
 // ---------------------------------------------------------------------------

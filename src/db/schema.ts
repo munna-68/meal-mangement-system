@@ -339,6 +339,42 @@ export const deposits = pgTable(
   (t) => [index("deposits_member_idx").on(t.memberId, t.date)],
 );
 
+/**
+ * A manager-declared opening balance for a member for a specific month — the
+ * position they started that month with ("balance as at the 1st").
+ *
+ * Normally a month's opening is not typed at all: it is the previous closed
+ * month's closing balance, carried forward automatically. This table exists
+ * only for the case where there is nothing to carry — the very first month the
+ * mess tracks, or a month whose predecessor was never closed — so each
+ * member's real starting position can be seeded once. Once a month is closed,
+ * its opening is final and lives in `monthly_settlements`.
+ *
+ * `amount` is signed: positive means the member started in credit, negative
+ * means they already owed the mess. This matches the ledger convention
+ * `balance = opening + deposits − cost`, where a negative balance is a debt.
+ */
+export const openingBalances = pgTable(
+  "opening_balances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    month: dateColumn("month").notNull(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull().default(0),
+    notes: text("notes"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("opening_balances_month_member_uq").on(t.month, t.memberId),
+    index("opening_balances_member_idx").on(t.memberId),
+  ],
+);
+
 /** Immutable, materialised month-end result for one member. */
 export const monthlySettlements = pgTable(
   "monthly_settlements",
@@ -426,6 +462,7 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   statusChanges: many(mealStatusChanges),
   guestMeals: many(guestMeals),
   deposits: many(deposits),
+  openingBalances: many(openingBalances),
   settlements: many(monthlySettlements),
 }));
 
@@ -468,6 +505,16 @@ export const depositsRelations = relations(deposits, ({ one }) => ({
   }),
 }));
 
+export const openingBalancesRelations = relations(
+  openingBalances,
+  ({ one }) => ({
+    member: one(members, {
+      fields: [openingBalances.memberId],
+      references: [members.id],
+    }),
+  }),
+);
+
 export const monthlySettlementsRelations = relations(
   monthlySettlements,
   ({ one }) => ({
@@ -494,6 +541,7 @@ export const schema = {
   extraLineItems,
   utilityBills,
   deposits,
+  openingBalances,
   monthlySettlements,
   monthCloses,
   messSettingsRelations,
@@ -507,5 +555,6 @@ export const schema = {
   bazarDutiesRelations,
   bazarDutyRoomsRelations,
   depositsRelations,
+  openingBalancesRelations,
   monthlySettlementsRelations,
 };

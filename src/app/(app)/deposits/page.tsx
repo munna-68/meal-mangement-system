@@ -1,23 +1,62 @@
 import type { Metadata } from "next";
 
 import { PageHeader, Stat } from "@/components/page-header";
-import { currentMonthKey, formatMonthDisplay } from "@/lib/dates";
+import {
+  addMonths,
+  currentMonthKey,
+  formatMonthDisplay,
+  todayKey,
+} from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
-import { getDeposits, getMembersWithRooms } from "@/server/queries";
+import {
+  getDeposits,
+  getLastClosedMonth,
+  getMembersWithRooms,
+  getOpeningBalances,
+} from "@/server/queries";
+import {
+  CsvImportSection,
+} from "./csv-import-section";
 import { DepositsClient, type DepositRecord } from "./deposits-client";
+import {
+  OpeningBalancesSection,
+  type OpeningRecord,
+} from "./opening-balances-section";
 
 export const metadata: Metadata = { title: "Deposits" };
 
 export default async function DepositsPage() {
   await requireSession();
 
-  const [members, deposits] = await Promise.all([
+  const [members, deposits, openingRows, lastClosedMonth] = await Promise.all([
     getMembersWithRooms(),
     getDeposits(),
+    getOpeningBalances(),
+    getLastClosedMonth(),
   ]);
 
   const memberById = new Map(members.map((member) => [member.id, member]));
+
+  // The first month of the open period — the one whose opening is a manual
+  // decision, because there is no closed month to carry forward into it. This
+  // is the default target month for the opening-balance and import forms.
+  const openMonth = lastClosedMonth
+    ? addMonths(lastClosedMonth, 1)
+    : currentMonthKey();
+  const today = todayKey();
+
+  const openings: OpeningRecord[] = openingRows.map((row) => {
+    const member = memberById.get(row.memberId);
+    return {
+      memberId: row.memberId,
+      memberName: member?.name ?? "Unknown",
+      roomNumber: member?.roomNumber ?? "-",
+      month: row.month,
+      amount: row.amount,
+      notes: row.notes,
+    };
+  });
 
   const records: DepositRecord[] = deposits.map((deposit) => {
     const member = memberById.get(deposit.memberId);
@@ -67,7 +106,19 @@ export default async function DepositsPage() {
           hint="of active members"
         />
       </div>
-      <DepositsClient members={options} deposits={records} />
+      <div className="flex flex-col gap-6">
+        <DepositsClient members={options} deposits={records} />
+        <OpeningBalancesSection
+          members={options}
+          openings={openings}
+          openMonth={openMonth}
+        />
+        <CsvImportSection
+          members={options}
+          today={today}
+          openMonth={openMonth}
+        />
+      </div>
     </>
   );
 }

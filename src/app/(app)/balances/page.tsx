@@ -59,6 +59,7 @@ export default async function BalancesPage() {
     rateCards: snapshot.rateCards,
     deposits: snapshot.deposits,
     settlements: snapshot.settlements,
+    openingBalances: snapshot.openingBalances,
     lastClosedMonth: snapshot.lastClosedMonth,
     ramadanMode: snapshot.settings.ramadanMode,
     soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
@@ -67,6 +68,21 @@ export default async function BalancesPage() {
   });
 
   const activeRows = result.rows.filter((row) => row.active);
+
+  // The opening figure comes from a manager-declared opening balance for the
+  // first open month when one is set, and otherwise from the last closed
+  // month's closing balance. Say which, rather than always claiming a carry.
+  const declaredOpeningMonth = result.periodStart.slice(0, 7);
+  const hasDeclaredOpening = snapshot.openingBalances.some(
+    (opening) => opening.month === declaredOpeningMonth,
+  );
+  const openingHint = hasDeclaredOpening
+    ? snapshot.lastClosedMonth
+      ? `set by hand, overriding ${snapshot.lastClosedMonth}`
+      : "set by hand for the first month"
+    : snapshot.lastClosedMonth
+      ? `carried from ${snapshot.lastClosedMonth}`
+      : "no closed month to carry from yet";
 
   return (
     <>
@@ -114,9 +130,9 @@ export default async function BalancesPage() {
           hint="meals + Khala + bills + Extra, accrued to date"
         />
         <Stat
-          label="Opening carried in"
+          label={hasDeclaredOpening ? "Opening balance set" : "Opening carried in"}
           value={formatTaka(result.summary.openingBalance)}
-          hint="from the last closed month"
+          hint={openingHint}
         />
       </div>
 

@@ -149,12 +149,14 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       today: snapshot.today,
     });
 
-    // Opening balances come from the immediately preceding month, matching what
-    // closing this month will actually store.
+    // Opening balances come from a manager-declared opening balance for this
+    // month when one exists, otherwise the immediately preceding closed month's
+    // closing balance — matching exactly what closing this month will store.
     const openingBalances = openingBalancesFor({
       month,
       closedMonths: closedSet,
       settlements: snapshot.settlements,
+      openingBalances: snapshot.openingBalances,
     });
 
     const preview = buildSettlementRows({

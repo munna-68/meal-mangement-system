@@ -14,6 +14,7 @@ import {
   messSettings,
   monthCloses,
   monthlySettlements,
+  openingBalances,
   rateCards,
   rooms,
   utilityBills,
@@ -23,6 +24,7 @@ import type {
   ExtraItemData,
   GuestMealData,
   MemberData,
+  OpeningBalanceData,
   RateCardData,
   RegisterSnapshot,
   SettlementData,
@@ -282,6 +284,21 @@ export async function getSettlements(): Promise<SettlementData[]> {
       closingBalance: monthlySettlements.closingBalance,
     })
     .from(monthlySettlements)
+    .then((rows) => rows.map((r) => ({ ...r, month: monthOf(r.month) })));
+}
+
+/** Manager-declared opening balances, keyed by member and month. */
+export async function getOpeningBalances(): Promise<
+  (OpeningBalanceData & { notes: string | null })[]
+> {
+  return db
+    .select({
+      memberId: openingBalances.memberId,
+      month: openingBalances.month,
+      amount: openingBalances.amount,
+      notes: openingBalances.notes,
+    })
+    .from(openingBalances)
     .then((rows) => rows.map((r) => ({ ...r, month: monthOf(r.month) })));
 }
 
@@ -664,6 +681,7 @@ export interface LedgerSnapshot {
   bills: UtilityBillData[];
   deposits: (DepositData & { id: string; notes: string | null })[];
   settlements: SettlementData[];
+  openingBalances: OpeningBalanceData[];
   lastClosedMonth: MonthKey | null;
 }
 
@@ -679,6 +697,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     bills,
     depositRows,
     settlements,
+    openingBalanceRows,
     lastClosedMonth,
   ] = await Promise.all([
     getSettingsOrDefaults(),
@@ -691,6 +710,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     getUtilityBills(),
     getDeposits(),
     getSettlements(),
+    getOpeningBalances(),
     getLastClosedMonth(),
   ]);
 
@@ -707,6 +727,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     bills,
     deposits: depositRows,
     settlements,
+    openingBalances: openingBalanceRows,
     lastClosedMonth,
   };
 }

@@ -154,29 +154,53 @@ export interface OpeningBalanceInput {
   month: MonthKey;
   closedMonths: ReadonlySet<MonthKey>;
   settlements: { memberId: string; month: MonthKey; closingBalance: number }[];
+  /**
+   * Manager-declared opening balances, which take precedence for `month`.
+   *
+   * Required rather than optional on purpose: when this was optional it
+   * defaulted to `[]`, so a caller that forgot to pass it silently previewed
+   * every opening balance as 0 while the live dashboard showed the real
+   * figure. Making it required turns that class of bug into a compile error.
+   */
+  openingBalances: { memberId: string; month: MonthKey; amount: number }[];
 }
 
 /**
- * Opening balances for a month that is being closed: the closing balances of
- * the *immediately preceding* month, and nothing else.
+ * Opening balances for a month that is being closed.
+ *
+ * A manager-declared opening balance for this exact month is authoritative —
+ * it is the mess's statement of where that member actually started. Otherwise
+ * the balance is the *immediately preceding* month's closing balance, and
+ * nothing else.
  *
  * Deliberately not "the most recent closed month we can find" — that would
  * silently skip an unclosed month and understate what a member owes.
  * `requiredPrecedingClose` guarantees the preceding month is closed whenever
  * there was anything to carry, so an empty map here means "the ledger starts
  * with this month".
+ *
+ * The live dashboard (`computeRunningBalances`) applies the same precedence for
+ * the first open month, so the figure shown today and the figure stored when
+ * the month is closed can never disagree.
  */
 export function openingBalancesFor(
   input: OpeningBalanceInput,
 ): Map<string, number> {
   const prev = previousMonth(input.month);
   const balances = new Map<string, number>();
-  if (!input.closedMonths.has(prev)) return balances;
-
-  for (const settlement of input.settlements) {
-    if (settlement.month === prev) {
-      balances.set(settlement.memberId, settlement.closingBalance);
+  if (input.closedMonths.has(prev)) {
+    for (const settlement of input.settlements) {
+      if (settlement.month === prev) {
+        balances.set(settlement.memberId, settlement.closingBalance);
+      }
     }
   }
+
+  for (const opening of input.openingBalances) {
+    if (opening.month === input.month) {
+      balances.set(opening.memberId, opening.amount);
+    }
+  }
+
   return balances;
 }
