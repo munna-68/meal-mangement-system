@@ -7,7 +7,7 @@ import { requireSession } from "@/server/auth";
 import { getSettingsOrDefaults } from "@/server/queries";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  await requireSession();
+  const user = await requireSession();
   const settings = await getSettingsOrDefaults();
 
   return (
@@ -30,6 +30,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 Ramadan
               </span>
             ) : null}
+            <span
+              className="hidden max-w-32 truncate text-xs text-muted-foreground sm:inline"
+              title={`Signed in as ${user.username} (${user.role.toLowerCase()})`}
+            >
+              {user.displayName}
+            </span>
             <MobileMenuButton />
             <LogoutButton />
           </div>

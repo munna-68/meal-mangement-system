@@ -1,26 +1,34 @@
 import type { Metadata } from "next";
 
+import { AlertTriangleIcon } from "lucide-react";
+
 import { LedgerSheet, type LedgerRowView } from "@/components/ledger-sheet";
 import { MealRegisterSheet } from "@/components/meal-register-sheet";
 import { PageHeader, Stat } from "@/components/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   buildSettlementRows,
   computeMonth,
   mealRegisterForMonth,
+  type RegisterSnapshot,
 } from "@/lib/calc";
 import {
   addMonths,
   currentMonthKey,
+  daysInMonth,
   formatBengaliMonth,
   formatMonthLongDisplay,
   isValidMonthKey,
   monthEnd,
 } from "@/lib/dates";
+import { closedMonthSet, laterClosedMonthsFor, monthsWithActivity, openingBalancesFor, requiredPrecedingClose } from "@/lib/locks";
 import { formatTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { ensureAutoExtrasForMonth } from "@/server/auto-extras";
 import {
+  getAllConfirmedBazarDates,
   getClosedMonths,
+  getMonthClose,
   getSettlementRowsForMonth,
   loadLedgerSnapshot,
 } from "@/server/queries";
@@ -39,6 +47,8 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
 
   const closedMonths = await getClosedMonths();
   const isClosed = closedMonths.includes(month);
+  const closedSet = closedMonthSet(closedMonths);
+  const laterClosedMonths = laterClosedMonthsFor(month, closedSet);
 
   if (!isClosed && month <= currentMonthKey()) {
     try {
@@ -50,6 +60,39 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
 
   const snapshot = await loadLedgerSnapshot();
 
+  // Months must be closed in order, because a month's opening balance is the
+  // previous month's closing balance. Work out up front whether this one can be
+  // closed, so the reason is shown before the user clicks rather than after.
+  let closeBlock: string | null = null;
+  if (!isClosed) {
+    if (laterClosedMonths.length > 0) {
+      closeBlock =
+        `${formatMonthLongDisplay(laterClosedMonths[0])} is already closed. Reopen it first — ` +
+        `closing ${formatMonthLongDisplay(month)} now would leave it holding figures ` +
+        `based on the old balance.`;
+    } else {
+      const blocker = requiredPrecedingClose({
+        month,
+        closedMonths: closedSet,
+        activityMonths: monthsWithActivity({
+          changes: snapshot.changes,
+          guestMeals: snapshot.guestMeals,
+          deposits: snapshot.deposits,
+          extras: snapshot.extras,
+          bills: snapshot.bills,
+          bazarDates: await getAllConfirmedBazarDates(),
+        }),
+      });
+      if (blocker) {
+        closeBlock =
+          `${formatMonthLongDisplay(blocker)} is not closed yet. Close it first — ` +
+          `${formatMonthLongDisplay(month)}'s opening balances come from the month ` +
+          `before it, so closing this one now would skip it and understate what ` +
+          `members owe.`;
+      }
+    }
+  }
+
   let rows: LedgerRowView[];
   let totals: {
     cost: number;
@@ -59,6 +102,9 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
   };
 
   if (isClosed) {
+    // A closed month reads only frozen data: the stored settlement rows and the
+    // stored register. Nothing here is recomputed from live tables, so the
+    // ledger PDF and the register PDF on this page can never disagree.
     const stored = await getSettlementRowsForMonth(month);
     rows = stored.map((row) => ({
       memberId: row.memberId,
@@ -87,6 +133,9 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
     const computation = computeMonth({
       month,
       cutoff: monthEnd(month),
+      // Match what closing the month would store: the flat monthly charges are
+      // billed in full, so the preview and the frozen figures agree.
+      finalize: true,
       members: snapshot.members,
       rooms: snapshot.rooms,
       changes: snapshot.changes,
@@ -100,15 +149,13 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       today: snapshot.today,
     });
 
-    const openingBalances = new Map<string, number>();
-    const prior = snapshot.settlements
-      .filter((settlement) => settlement.month < month)
-      .sort((a, b) => (a.month < b.month ? 1 : -1));
-    for (const settlement of prior) {
-      if (!openingBalances.has(settlement.memberId)) {
-        openingBalances.set(settlement.memberId, settlement.closingBalance);
-      }
-    }
+    // Opening balances come from the immediately preceding month, matching what
+    // closing this month will actually store.
+    const openingBalances = openingBalancesFor({
+      month,
+      closedMonths: closedSet,
+      settlements: snapshot.settlements,
+    });
 
     const preview = buildSettlementRows({
       computation,
@@ -154,14 +201,30 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
 
   const ramadanMode = snapshot.settings.ramadanMode;
 
-  const register = mealRegisterForMonth({
-    month,
-    cutoff: monthEnd(month),
-    members: snapshot.members,
-    rooms: snapshot.rooms,
-    changes: snapshot.changes,
-    today: snapshot.today,
-  });
+  // The register shown next to the ledger always comes from the same source as
+  // the ledger itself: frozen for a closed month, live only while it is open.
+  let register: RegisterSnapshot;
+  let registerMissing = false;
+
+  if (isClosed) {
+    const close = await getMonthClose(month);
+    if (close?.registerSnapshot) {
+      register = close.registerSnapshot;
+    } else {
+      register = { days: daysInMonth(month), rows: [] };
+      registerMissing = true;
+    }
+  } else {
+    const live = mealRegisterForMonth({
+      month,
+      cutoff: monthEnd(month),
+      members: snapshot.members,
+      rooms: snapshot.rooms,
+      changes: snapshot.changes,
+      today: snapshot.today,
+    });
+    register = { days: live.days, rows: live.rows };
+  }
 
   return (
     <>
@@ -189,11 +252,33 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
         month={month}
         months={monthOptions}
         closed={isClosed}
+        laterClosedMonths={laterClosedMonths}
+        closeBlock={closeBlock}
         memberCount={rows.length}
         totalCost={totals.cost}
         totalDeposits={totals.deposits}
         totalClosing={totals.closing}
       />
+
+      {closeBlock ? (
+        <Alert className="mt-4 border-amber-300 bg-amber-50/70">
+          <AlertTriangleIcon className="text-amber-700" />
+          <AlertTitle>This month cannot be closed yet</AlertTitle>
+          <AlertDescription className="text-xs">{closeBlock}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {registerMissing ? (
+        <Alert variant="destructive" className="mt-4">
+          <AlertTriangleIcon />
+          <AlertTitle>No frozen register for this month</AlertTitle>
+          <AlertDescription className="text-xs">
+            This month was closed before the register was stored with the
+            settlement, so there is nothing to print. Reopen the month and close
+            it again to freeze the register.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="mt-5 overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full text-sm">

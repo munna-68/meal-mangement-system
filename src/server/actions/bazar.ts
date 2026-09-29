@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
 import { computeDayTotals, rateCardFor } from "@/lib/calc";
+import { formatTaka } from "@/lib/money";
 import { buildDutyUnits, orderUnitsFrom } from "@/lib/roster";
 import {
   addDays,
@@ -23,11 +24,17 @@ import {
   todayKey,
 } from "@/lib/dates";
 import { requireSession } from "@/server/auth";
+import { recordAudit } from "@/server/audit";
 import {
-  ensureAutoExtrasForDate,
+  autoExtraRowsFor,
+  dailyExtraSourceKey,
+  insertAutoExtraRows,
+  managerFeeSourceKey,
+  pendingAutoExtraRows,
   setAutoExtraVoided,
 } from "@/server/auto-extras";
-import { loadLedgerSnapshot } from "@/server/queries";
+import { monthLockError } from "@/server/month-lock";
+import { getRateCards, loadLedgerSnapshot } from "@/server/queries";
 
 const dutySchema = z.object({
   date: z.string().refine(isValidDateKey, "Invalid date"),
@@ -237,11 +244,16 @@ const bazarRecordSchema = z.object({
  * Records the day's cash movements and stores a snapshot of the computed
  * totals. The deduction is the only field that feeds back into the budget, and
  * it always needs a reason.
+ *
+ * The recurring daily Extra and the manager's fee are written in the same
+ * transaction as the record, *and* are included in the total, so the stored
+ * record and the printed slip always agree — on the first save as well as on
+ * later edits.
  */
 export async function saveBazarRecord(
   input: z.infer<typeof bazarRecordSchema>,
 ): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   const parsed = bazarRecordSchema.safeParse(input);
   if (!parsed.success) {
     return fail(firstIssue(parsed.error, "Invalid bazar record"));
@@ -255,15 +267,29 @@ export async function saveBazarRecord(
     return fail("You cannot record a bazar for a future date.");
   }
 
+  const locked = await monthLockError([data.date]);
+  if (locked) return fail(locked);
+
   try {
     const snapshot = await loadLedgerSnapshot();
+    const rateCard = rateCardFor(snapshot.rateCards, data.date);
+
+    // The recurring rows this day should carry, minus any that already exist.
+    // They are merged into the engine's input *before* the total is computed,
+    // so the saved figure already includes them on the very first save.
+    const pendingAutoRows = pendingAutoExtraRows(
+      data.date,
+      rateCard,
+      snapshot.extras.map((item) => item.sourceKey),
+    );
+
     const totals = computeDayTotals({
       date: data.date,
       members: snapshot.members,
       changes: snapshot.changes,
       guestMeals: snapshot.guestMeals,
-      extras: snapshot.extras,
-      rateCard: rateCardFor(snapshot.rateCards, data.date),
+      extras: [...snapshot.extras, ...pendingAutoRows],
+      rateCard,
       deductionAmount: data.deductionAmount,
       ramadanMode: snapshot.settings.ramadanMode,
       today: snapshot.today,
@@ -295,14 +321,44 @@ export async function saveBazarRecord(
       updatedAt: new Date(),
     };
 
-    await db
-      .insert(dailyBazarRecords)
-      .values(values)
-      .onConflictDoUpdate({ target: dailyBazarRecords.date, set: values });
+    // One transaction: the recurring rows and the record that owns them land
+    // together. A failure can neither leave a confirmed day with no recurring
+    // costs, nor leave recurring costs attached to a day nobody confirmed.
+    await db.transaction(async (tx) => {
+      await insertAutoExtraRows(pendingAutoRows, tx);
+      await tx
+        .insert(dailyBazarRecords)
+        .values(values)
+        .onConflictDoUpdate({ target: dailyBazarRecords.date, set: values });
 
-    // Confirming the bazar is what registers that day's recurring costs, so the
-    // record must exist before the generator looks for it.
-    await ensureAutoExtrasForDate(data.date);
+      await recordAudit(
+        {
+          actor,
+          action: "bazar.confirm",
+          entityType: "bazar_day",
+          entityId: data.date,
+          summary:
+            `Confirmed the bazar for ${data.date} — budget ${formatTaka(
+              totals.totalBudget,
+            )}` +
+            (data.deductionAmount > 0
+              ? `, deduction ${formatTaka(data.deductionAmount)} (${data.deductionReason?.trim()})`
+              : ""),
+          detail: {
+            date: data.date,
+            totalBudget: totals.totalBudget,
+            deductionAmount: data.deductionAmount,
+            deductionReason: data.deductionReason?.trim() ?? null,
+            extraAmount: totals.extraAmount,
+            advanceGiven: data.advanceGiven,
+            actualExpense: data.actualExpense,
+            changeReturned,
+            autoRowsCreated: pendingAutoRows.length,
+          },
+        },
+        tx,
+      );
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not save the bazar record"));
   }
@@ -344,17 +400,44 @@ export async function toggleAutoExtra(input: {
   kind: "daily-extra" | "manager-fee";
   voided: boolean;
 }): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   if (!isValidDateKey(input.date)) return fail("Invalid date");
+
+  const locked = await monthLockError([input.date]);
+  if (locked) return fail(locked);
 
   const sourceKey =
     input.kind === "daily-extra"
-      ? `auto:daily-extra:${input.date}`
-      : `auto:manager-fee:${input.date}`;
+      ? dailyExtraSourceKey(input.date)
+      : managerFeeSourceKey(input.date);
+  const label =
+    input.kind === "daily-extra" ? "Daily recurring Extra" : "Manager's daily fee";
 
   try {
-    await ensureAutoExtrasForDate(input.date);
-    await setAutoExtraVoided(input.date, sourceKey, input.voided);
+    const cards = await getRateCards();
+    await db.transaction(async (tx) => {
+      // The row must exist before it can be voided, and it has to be created
+      // inside the same transaction so a failure cannot leave a stray cost.
+      await insertAutoExtraRows(
+        autoExtraRowsFor(input.date, rateCardFor(cards, input.date)),
+        tx,
+      );
+      await setAutoExtraVoided(input.date, sourceKey, input.voided, tx);
+
+      await recordAudit(
+        {
+          actor,
+          action: input.voided ? "extra.void" : "extra.unvoid",
+          entityType: "extra",
+          entityId: sourceKey,
+          summary: `${input.voided ? "Turned off" : "Turned back on"} the ${label} for ${
+            input.date
+          }`,
+          detail: { date: input.date, kind: input.kind, voided: input.voided },
+        },
+        tx,
+      );
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not update the recurring extra"));
   }

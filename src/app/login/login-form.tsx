@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Loader2Icon, LockIcon } from "lucide-react";
+import { Loader2Icon, LogInIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -18,15 +18,26 @@ export function LoginForm({ next }: { next: string }) {
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
       <div className="flex flex-col gap-2">
-        <Label htmlFor="pin">Manager PIN</Label>
+        <Label htmlFor="username">Username</Label>
         <Input
-          id="pin"
-          name="pin"
-          type="password"
-          autoComplete="current-password"
+          id="username"
+          name="username"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
           autoFocus
           required
-          placeholder="••••"
+          className="h-11 text-base"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="password">Password</Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
           className="h-11 text-base"
         />
       </div>
@@ -41,9 +52,9 @@ export function LoginForm({ next }: { next: string }) {
         {pending ? (
           <Loader2Icon className="animate-spin" />
         ) : (
-          <LockIcon />
+          <LogInIcon />
         )}
-        Unlock mess register
+        Sign in
       </Button>
     </form>
   );

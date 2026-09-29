@@ -61,6 +61,14 @@ export interface RoomRecord {
   occupants: number;
 }
 
+export interface MemberUnclosedHistory {
+  total: number;
+  months: string[];
+  statusChanges: number;
+  guestMeals: number;
+  deposits: number;
+}
+
 export interface MemberRecord {
   id: string;
   name: string;
@@ -72,6 +80,8 @@ export interface MemberRecord {
   joinDate: string;
   leaveDate: string | null;
   notes: string | null;
+  /** Records in months that have not been closed, destroyed by a delete. */
+  unclosed: MemberUnclosedHistory;
 }
 
 export function MembersClient({
@@ -223,11 +233,7 @@ export function MembersClient({
                       >
                         <PencilIcon />
                       </Button>
-                      <DeleteButton
-                        title={`Delete ${member.name}?`}
-                        description="Members with closed months on record cannot be deleted — mark them inactive instead."
-                        onConfirm={() => deleteMember(member.id)}
-                      />
+                      <MemberDeleteButton member={member} />
                     </div>
                   </td>
                 </tr>
@@ -294,6 +300,95 @@ function DeleteButton({
             }}
           >
             Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * Deleting a member cascades to their meal status changes, guest meals and
+ * deposits. Anything in a month that is still open would silently rewrite that
+ * month's totals, so the dialog spells out exactly what would be lost and the
+ * server refuses the delete unless the loss is confirmed.
+ */
+function MemberDeleteButton({ member }: { member: MemberRecord }) {
+  const { run, pending } = useAction();
+  const losses = member.unclosed;
+  const hasLosses = losses.total > 0;
+
+  const items = [
+    losses.statusChanges > 0
+      ? `${losses.statusChanges} meal-status change${losses.statusChanges === 1 ? "" : "s"}`
+      : null,
+    losses.guestMeals > 0
+      ? `${losses.guestMeals} guest-meal record${losses.guestMeals === 1 ? "" : "s"}`
+      : null,
+    losses.deposits > 0
+      ? `${losses.deposits} deposit${losses.deposits === 1 ? "" : "s"}`
+      : null,
+  ].filter((value): value is string => value !== null);
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={`Delete ${member.name}`}
+        >
+          <TrashIcon />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete {member.name}?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="flex flex-col gap-2 text-sm">
+              <p>
+                This removes the member and everything attached to them. Members
+                with closed months on record cannot be deleted — mark them
+                inactive instead.
+              </p>
+              {hasLosses ? (
+                <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+                  <p className="font-medium">
+                    This will also destroy history in unclosed months:
+                  </p>
+                  <ul className="mt-1 list-inside list-disc">
+                    {items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-1">
+                    Month{losses.months.length === 1 ? "" : "s"}{" "}
+                    {losses.months.join(", ")} will be rewritten. Close{" "}
+                    {losses.months.length === 1 ? "that month" : "those months"}{" "}
+                    first if you want to keep them.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  Nothing in an unclosed month depends on this member.
+                </p>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={pending}
+            variant={hasLosses ? "destructive" : "default"}
+            onClick={(event) => {
+              event.preventDefault();
+              run(() =>
+                deleteMember({ id: member.id, confirmLoss: hasLosses }),
+              );
+            }}
+          >
+            {hasLosses ? "Delete and lose history" : "Delete"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

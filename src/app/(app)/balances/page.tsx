@@ -109,9 +109,9 @@ export default async function BalancesPage() {
           value={formatTaka(result.summary.deposits)}
         />
         <Stat
-          label="Cost to date"
+          label="Accrued cost"
           value={formatTaka(result.summary.cost)}
-          hint="meals + Khala + bills + Extra"
+          hint="meals + Khala + bills + Extra, accrued to date"
         />
         <Stat
           label="Opening carried in"
@@ -158,7 +158,7 @@ export default async function BalancesPage() {
                 <th className="px-3 py-2 text-left font-medium">Member</th>
                 <th className="px-3 py-2 text-right font-medium">Opening</th>
                 <th className="px-3 py-2 text-right font-medium">Deposits</th>
-                <th className="px-3 py-2 text-right font-medium">Cost to date</th>
+                <th className="px-3 py-2 text-right font-medium">Accrued cost</th>
                 <th className="px-3 py-2 text-right font-medium">Balance</th>
               </tr>
             </thead>
@@ -238,8 +238,10 @@ export default async function BalancesPage() {
       </SectionCard>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Meal costs accrue day by day. Month-level charges (Khala, electricity,
-        wifi and the Extra pool) are billed in full for the in-progress month.{" "}
+        Meal costs accrue day by day. Khala, electricity, wifi and the Extra pool
+        are flat monthly amounts that also accrue day by day, so a member one day
+        into the month is not billed for the whole month — the full amount is
+        charged when the month is closed.{" "}
         <Link href="/settlement" className="underline">
           Close the month
         </Link>{" "}

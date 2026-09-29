@@ -1,8 +1,14 @@
 /**
- * Seeds the starting data: mess settings, rooms, members and the first rate
- * card. Safe to run repeatedly — existing rows are left alone.
+ * Seeds the starting data: the first owner account, mess settings, rooms,
+ * members and the first rate card. Safe to run repeatedly — existing rows are
+ * left alone.
  *
  *   npm run db:seed
+ *
+ * The first sign-in comes from ADMIN_USERNAME / ADMIN_PASSWORD in .env. A
+ * missing or weak password is a hard failure: this app moves real money, and
+ * shipping it with a default credential is exactly the hole the accounts
+ * replaced the shared PIN to close.
  */
 import { config } from "dotenv";
 import { eq } from "drizzle-orm";
@@ -10,7 +16,9 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { currentMonthKey, monthStart } from "../src/lib/dates";
+import { assertStrongPassword, hashPassword } from "../src/lib/password";
 import {
+  accounts,
   members,
   messSettings,
   rateCards,
@@ -23,6 +31,8 @@ config({ path: ".env" });
 const DEFAULT_HOSTEL_NAME = "আল্লাহর দান ছাত্রাবাস-২";
 const DEFAULT_ADDRESS =
   "আলমপুর (চকবাজার) ক্যাডেট কলেজ, রংপুর সদর, রংপুর";
+
+const DEFAULT_ADMIN_USERNAME = "owner";
 
 interface SeedRoom {
   number: string;
@@ -91,6 +101,37 @@ async function main() {
     ...(isLocal ? {} : { ssl: { rejectUnauthorized: false } }),
   });
   const db = drizzle(pool, { schema });
+
+  // --- First owner account ---
+  const existingAccounts = await db.select().from(accounts);
+  if (existingAccounts.length === 0) {
+    const username = (process.env.ADMIN_USERNAME?.trim() || DEFAULT_ADMIN_USERNAME)
+      .toLowerCase();
+    const password = process.env.ADMIN_PASSWORD ?? "";
+
+    if (!password) {
+      const message =
+        "No sign-in exists yet and ADMIN_PASSWORD is not set. Set " +
+        "ADMIN_USERNAME and ADMIN_PASSWORD in .env, then run `npm run db:seed` " +
+        "again — the app cannot be signed into until then.";
+      if (process.env.NODE_ENV === "production") throw new Error(message);
+      console.warn(`[seed] WARNING: ${message}`);
+    } else {
+      // Hard failure, in every environment: a weak password here is the exact
+      // "default PIN shipped to production" problem this replaces.
+      assertStrongPassword(password, `ADMIN_PASSWORD for "${username}"`);
+
+      await db.insert(accounts).values({
+        username,
+        displayName: process.env.ADMIN_DISPLAY_NAME?.trim() || "Mess Owner",
+        role: "OWNER",
+        passwordHash: await hashPassword(password),
+      });
+      console.log(`[seed] owner account "${username}" created`);
+    }
+  } else {
+    console.log(`[seed] ${existingAccounts.length} account(s) already exist`);
+  }
 
   // --- Mess settings (single row) ---
   const existingSettings = await db.select().from(messSettings).limit(1);

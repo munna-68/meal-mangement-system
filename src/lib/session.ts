@@ -1,64 +1,69 @@
 import { jwtVerify, SignJWT } from "jose";
 
+import { assertSecureEnvironment, warnAboutRetiredEnv } from "./env-guard";
+
 export const SESSION_COOKIE = "meal_session";
 const SESSION_DURATION = "30d";
 
+export type AccountRole = "OWNER" | "MANAGER";
+
+/** The signed-in person, as carried in the session cookie. */
+export interface SessionUser {
+  accountId: string;
+  username: string;
+  displayName: string;
+  role: AccountRole;
+}
+
+let warnedAboutRetiredEnv = false;
+
 function secret(): Uint8Array {
-  const value = process.env.SESSION_SECRET;
-  if (!value || value.length < 16) {
-    throw new Error(
-      "SESSION_SECRET is missing or too short. Set a long random string in .env",
-    );
+  assertSecureEnvironment();
+  if (!warnedAboutRetiredEnv) {
+    warnAboutRetiredEnv();
+    warnedAboutRetiredEnv = true;
   }
-  return new TextEncoder().encode(value);
+  return new TextEncoder().encode(process.env.SESSION_SECRET!);
 }
 
-export interface SessionPayload {
-  role: "admin";
-}
-
-export async function createSessionToken(): Promise<string> {
-  return new SignJWT({ role: "admin" })
+export async function createSessionToken(user: SessionUser): Promise<string> {
+  return new SignJWT({
+    sub: user.accountId,
+    username: user.username,
+    name: user.displayName,
+    role: user.role,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(SESSION_DURATION)
     .sign(secret());
 }
 
+/**
+ * Verifies the session cookie. Only the identity is read from the token; every
+ * action re-checks the account against the database, so deactivating an account
+ * takes effect immediately rather than when its cookie expires.
+ */
 export async function verifySessionToken(
   token: string | undefined | null,
-): Promise<SessionPayload | null> {
+): Promise<SessionUser | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret(), {
       algorithms: ["HS256"],
     });
-    if (payload.role !== "admin") return null;
-    return { role: "admin" };
+
+    const accountId = typeof payload.sub === "string" ? payload.sub : null;
+    const username =
+      typeof payload.username === "string" ? payload.username : null;
+    const displayName = typeof payload.name === "string" ? payload.name : null;
+    const role = payload.role;
+
+    if (!accountId || !username || !displayName) return null;
+    if (role !== "OWNER" && role !== "MANAGER") return null;
+
+    return { accountId, username, displayName, role };
   } catch {
     return null;
   }
-}
-
-/**
- * Constant-time PIN check. Both sides are hashed first so the comparison is
- * always between equal-length buffers and cannot leak the PIN's length.
- */
-export async function isValidPin(candidate: string): Promise<boolean> {
-  const expected = process.env.ADMIN_PIN?.trim();
-  if (!expected) {
-    throw new Error("ADMIN_PIN is not set. Add it to .env");
-  }
-  if (typeof candidate !== "string" || candidate.length === 0) return false;
-
-  const encoder = new TextEncoder();
-  const [a, b] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(candidate)),
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-  ]);
-  const left = new Uint8Array(a);
-  const right = new Uint8Array(b);
-  let diff = 0;
-  for (let i = 0; i < left.length; i += 1) diff |= left[i] ^ right[i];
-  return diff === 0;
 }

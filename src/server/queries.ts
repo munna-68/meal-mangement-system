@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
+  accounts,
   bazarDuties,
   bazarDutyRooms,
   dailyBazarRecords,
@@ -23,6 +24,7 @@ import type {
   GuestMealData,
   MemberData,
   RateCardData,
+  RegisterSnapshot,
   SettlementData,
   StatusChangeData,
   UtilityBillData,
@@ -39,6 +41,12 @@ import {
   type DateKey,
   type MonthKey,
 } from "@/lib/dates";
+import {
+  closedMonthSet,
+  historyLoss,
+  type HistoryLoss,
+} from "@/lib/locks";
+import type { AccountRole } from "@/lib/session";
 
 export interface MemberWithRoom extends MemberData {
   phone: string | null;
@@ -135,6 +143,21 @@ export async function getMembersWithRooms(): Promise<MemberWithRoom[]> {
 export async function getActiveMembersWithRooms(): Promise<MemberWithRoom[]> {
   const all = await getMembersWithRooms();
   return all.filter((member) => member.active);
+}
+
+/** Member names by id, for readable audit lines. */
+export async function getMemberNames(
+  ids: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+
+  const rows = await db
+    .select({ id: members.id, name: members.name })
+    .from(members)
+    .where(inArray(members.id, unique));
+
+  return new Map(rows.map((row) => [row.id, row.name]));
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +298,218 @@ export async function getLastClosedMonth(): Promise<MonthKey | null> {
   return months[0] ?? null;
 }
 
+/** Closed months as a lookup set, for the write guards. */
+export async function getClosedMonthSet(): Promise<Set<MonthKey>> {
+  return closedMonthSet(await getClosedMonths());
+}
+
+export interface MonthCloseRow {
+  month: MonthKey;
+  notes: string | null;
+  closedAt: Date;
+  closedBy: string | null;
+  registerSnapshot: RegisterSnapshot | null;
+}
+
+/**
+ * The frozen record of a closed month, including the meal register as it stood
+ * at close time. The closed-month screen reads the register from here rather
+ * than recomputing it, so the screen and its PDFs cannot drift apart.
+ */
+export async function getMonthClose(
+  month: MonthKey,
+): Promise<MonthCloseRow | null> {
+  const [row] = await db
+    .select({
+      month: monthCloses.month,
+      notes: monthCloses.notes,
+      closedAt: monthCloses.closedAt,
+      closedBy: monthCloses.closedBy,
+      registerSnapshot: monthCloses.registerSnapshot,
+    })
+    .from(monthCloses)
+    .where(eq(monthCloses.month, monthStart(month)))
+    .limit(1);
+
+  if (!row) return null;
+  return {
+    month: monthOf(row.month),
+    notes: row.notes,
+    closedAt: row.closedAt,
+    closedBy: row.closedBy,
+    registerSnapshot: row.registerSnapshot ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Accounts
+// ---------------------------------------------------------------------------
+
+export interface AccountRow {
+  id: string;
+  username: string;
+  displayName: string;
+  role: AccountRole;
+  active: boolean;
+  failedAttempts: number;
+  lockedUntil: Date | null;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  /** Whether the lockout is still in force. Resolved here, not during render. */
+  locked: boolean;
+}
+
+const accountColumns = {
+  id: accounts.id,
+  username: accounts.username,
+  displayName: accounts.displayName,
+  role: accounts.role,
+  active: accounts.active,
+  failedAttempts: accounts.failedAttempts,
+  lockedUntil: accounts.lockedUntil,
+  lastLoginAt: accounts.lastLoginAt,
+  createdAt: accounts.createdAt,
+};
+
+type AccountSelectRow = {
+  id: string;
+  username: string;
+  displayName: string;
+  role: string;
+  active: boolean;
+  failedAttempts: number;
+  lockedUntil: Date | null;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+};
+
+function toAccountRow(row: AccountSelectRow): AccountRow {
+  return {
+    ...row,
+    role: row.role as AccountRole,
+    locked:
+      row.lockedUntil !== null && row.lockedUntil.getTime() > Date.now(),
+  };
+}
+
+export async function getAccounts(): Promise<AccountRow[]> {
+  const rows = await db
+    .select(accountColumns)
+    .from(accounts)
+    .orderBy(asc(accounts.username));
+  return rows.map(toAccountRow);
+}
+
+export async function getAccountById(id: string): Promise<AccountRow | null> {
+  const [row] = await db
+    .select(accountColumns)
+    .from(accounts)
+    .where(eq(accounts.id, id))
+    .limit(1);
+  return row ? toAccountRow(row) : null;
+}
+
+export async function countAccounts(): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(accounts);
+  return row?.count ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// What a member delete would destroy
+// ---------------------------------------------------------------------------
+
+export interface MemberHistoryLoss {
+  statusChanges: HistoryLoss;
+  guestMeals: HistoryLoss;
+  deposits: HistoryLoss;
+  /** Total records that sit in a month that has not been closed. */
+  unclosedItems: number;
+  /** Distinct unclosed months across all three record types, oldest first. */
+  unclosedMonths: MonthKey[];
+  hasUnclosedHistory: boolean;
+}
+
+function emptyLoss(): MemberHistoryLoss {
+  const empty: HistoryLoss = { total: 0, unclosed: 0, unclosedMonths: [] };
+  return {
+    statusChanges: empty,
+    guestMeals: empty,
+    deposits: empty,
+    unclosedItems: 0,
+    unclosedMonths: [],
+    hasUnclosedHistory: false,
+  };
+}
+
+/**
+ * For every member, how much of their history sits in months that have not been
+ * closed yet. Deleting a member cascades to these rows, which would silently
+ * rewrite those months, so the delete flow needs to know about them first.
+ */
+export async function getMemberHistoryLosses(): Promise<
+  Map<string, MemberHistoryLoss>
+> {
+  const [closed, changes, guests, depositRows] = await Promise.all([
+    getClosedMonthSet(),
+    getStatusChanges(),
+    getGuestMeals(),
+    getDeposits(),
+  ]);
+
+  const byMember = new Map<string, MemberHistoryLoss>();
+  const add = (
+    memberId: string,
+    kind: keyof Pick<
+      MemberHistoryLoss,
+      "statusChanges" | "guestMeals" | "deposits"
+    >,
+    dates: DateKey[],
+  ) => {
+    const entry = byMember.get(memberId) ?? emptyLoss();
+    entry[kind] = historyLoss(dates, closed);
+    byMember.set(memberId, entry);
+  };
+
+  const groupDates = (rows: { memberId: string; date: DateKey }[]) => {
+    const grouped = new Map<string, DateKey[]>();
+    for (const row of rows) {
+      const list = grouped.get(row.memberId);
+      if (list) list.push(row.date);
+      else grouped.set(row.memberId, [row.date]);
+    }
+    return grouped;
+  };
+
+  for (const [memberId, dates] of groupDates(changes)) {
+    add(memberId, "statusChanges", dates);
+  }
+  for (const [memberId, dates] of groupDates(guests)) {
+    add(memberId, "guestMeals", dates);
+  }
+  for (const [memberId, dates] of groupDates(depositRows)) {
+    add(memberId, "deposits", dates);
+  }
+
+  for (const entry of byMember.values()) {
+    entry.unclosedItems =
+      entry.statusChanges.unclosed +
+      entry.guestMeals.unclosed +
+      entry.deposits.unclosed;
+    entry.unclosedMonths = [
+      ...new Set([
+        ...entry.statusChanges.unclosedMonths,
+        ...entry.guestMeals.unclosedMonths,
+        ...entry.deposits.unclosedMonths,
+      ]),
+    ].sort();
+    entry.hasUnclosedHistory = entry.unclosedItems > 0;
+  }
+
+  return byMember;
+}
+
 /**
  * The earliest date any ledger activity happened, used to work out where the
  * open period begins when no month has been closed yet.
@@ -402,6 +637,14 @@ export async function getConfirmedBazarDates(
       and(gte(dailyBazarRecords.date, from), lte(dailyBazarRecords.date, to)),
     );
   return new Set(rows.map((row) => row.date));
+}
+
+/** Every confirmed bazar day, for whole-ledger activity checks. */
+export async function getAllConfirmedBazarDates(): Promise<DateKey[]> {
+  const rows = await db
+    .select({ date: dailyBazarRecords.date })
+    .from(dailyBazarRecords);
+  return rows.map((row) => row.date);
 }
 
 // ---------------------------------------------------------------------------

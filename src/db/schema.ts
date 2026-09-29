@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -12,6 +13,8 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+
+import type { RegisterSnapshot } from "@/lib/calc";
 
 /** A member ate both meal-times that day. */
 export const mealStatusEnum = pgEnum("meal_status", [
@@ -38,6 +41,12 @@ export const utilityTypeEnum = pgEnum("utility_type", [
   "ELECTRICITY",
   "WIFI",
 ]);
+
+/**
+ * OWNER can manage accounts; MANAGER can run the mess ledger. Both may write
+ * money data, and every such write is attributed to the signed-in account.
+ */
+export const accountRoleEnum = pgEnum("account_role", ["OWNER", "MANAGER"]);
 
 /**
  * Every calendar date in the system is stored as a `date` column in `string`
@@ -67,6 +76,66 @@ export const messSettings = pgTable("mess_settings", {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * A person who can sign in and change the ledger. Replaces the single shared
+ * PIN, so every write can be attributed to somebody.
+ */
+export const accounts = pgTable("accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Stored lower-cased; the login lookup lower-cases what the user typed. */
+  username: varchar("username", { length: 60 }).notNull().unique(),
+  displayName: text("display_name").notNull(),
+  role: accountRoleEnum("role").notNull().default("MANAGER"),
+  /** `scrypt:<salt>:<hash>`, see `src/lib/password.ts`. */
+  passwordHash: text("password_hash").notNull(),
+  active: boolean("active").notNull().default(true),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Append-only record of who changed what money-related data and when.
+ * `actorName` is denormalised so the trail survives an account being removed.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id").references(() => accounts.id, {
+      onDelete: "set null",
+    }),
+    actorName: text("actor_name").notNull(),
+    action: varchar("action", { length: 60 }).notNull(),
+    entityType: varchar("entity_type", { length: 40 }).notNull(),
+    entityId: text("entity_id"),
+    summary: text("summary").notNull(),
+    detail: jsonb("detail").$type<Record<string, unknown> | null>(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("audit_log_created_idx").on(t.createdAt),
+    index("audit_log_entity_idx").on(t.entityType, t.entityId),
+  ],
+);
+
+/** Login history, used for throttling and for spotting attempted break-ins. */
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    username: varchar("username", { length: 60 }).notNull(),
+    succeeded: boolean("succeeded").notNull(),
+    reason: varchar("reason", { length: 40 }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("login_attempts_username_idx").on(t.username, t.createdAt)],
+);
 
 export const rooms = pgTable("rooms", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -311,12 +380,41 @@ export const monthCloses = pgTable("month_closes", {
   id: uuid("id").primaryKey().defaultRandom(),
   month: dateColumn("month").notNull().unique(),
   notes: text("notes"),
+  /** Which account closed the month, for the audit trail. */
+  closedBy: uuid("closed_by").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  /**
+   * The frozen meal register (one row per member, one cell per day) exactly as
+   * it stood when the month was closed. The closed-month screen and both of its
+   * PDFs read this instead of recomputing, so they can never drift apart.
+   */
+  registerSnapshot: jsonb("register_snapshot").$type<RegisterSnapshot | null>(),
   closedAt: timestamp("closed_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
 
 export const messSettingsRelations = relations(messSettings, () => ({}));
+
+export const accountsRelations = relations(accounts, ({ many }) => ({
+  auditEntries: many(auditLog),
+  closedMonths: many(monthCloses),
+}));
+
+export const auditLogRelations = relations(auditLog, ({ one }) => ({
+  account: one(accounts, {
+    fields: [auditLog.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const monthClosesRelations = relations(monthCloses, ({ one }) => ({
+  closedByAccount: one(accounts, {
+    fields: [monthCloses.closedBy],
+    references: [accounts.id],
+  }),
+}));
 
 export const roomsRelations = relations(rooms, ({ many }) => ({
   members: many(members),
@@ -382,6 +480,9 @@ export const monthlySettlementsRelations = relations(
 
 export const schema = {
   messSettings,
+  accounts,
+  auditLog,
+  loginAttempts,
   rooms,
   members,
   rateCards,
@@ -396,6 +497,9 @@ export const schema = {
   monthlySettlements,
   monthCloses,
   messSettingsRelations,
+  accountsRelations,
+  auditLogRelations,
+  monthClosesRelations,
   roomsRelations,
   membersRelations,
   mealStatusChangesRelations,

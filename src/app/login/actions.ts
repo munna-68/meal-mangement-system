@@ -12,16 +12,24 @@ export async function loginAction(
   _prevState: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
-  const pin = String(formData.get("pin") ?? "").trim();
+  const username = String(formData.get("username") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
   const nextParam = String(formData.get("next") ?? "/today");
 
-  if (!pin) {
-    return { error: "Enter the PIN to continue." };
+  if (!username || !password) {
+    return { error: "Enter your username and password." };
   }
 
-  const ok = await signIn(pin);
-  if (!ok) {
-    return { error: "That PIN is not correct." };
+  try {
+    const result = await signIn(username, password);
+    if (!result.ok) return { error: result.error };
+  } catch (error) {
+    // A misconfigured SESSION_SECRET must stay loud rather than looking like a
+    // wrong password; anything else is reported as a normal sign-in failure.
+    if (error instanceof Error && error.message.includes("SESSION_SECRET")) {
+      throw error;
+    }
+    return { error: "Could not sign you in right now. Try again." };
   }
 
   const destination =

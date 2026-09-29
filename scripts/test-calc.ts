@@ -20,12 +20,32 @@ import {
   type ExtraItemData,
   type MemberData,
   type RateCardData,
+  type RegisterSnapshot,
   type RoomData,
   type StatusChangeData,
   type GuestMealData,
   type UtilityBillData,
   type DepositData,
 } from "../src/lib/calc";
+import {
+  autoExtraRowsFor,
+  pendingAutoExtraRows,
+} from "../src/lib/auto-extras";
+import {
+  closedMonthFor,
+  closedMonthSet,
+  historyLoss,
+  isMonthClosed,
+  laterClosedMonthsFor,
+  monthsWithActivity,
+  openingBalancesFor,
+  requiredPrecedingClose,
+} from "../src/lib/locks";
+import {
+  assertStrongPassword,
+  isWeakPassword,
+  passwordProblem,
+} from "../src/lib/password-policy";
 import { buildDutyUnits, orderUnitsFrom } from "../src/lib/roster";
 
 let passed = 0;
@@ -574,18 +594,24 @@ section("Running balance (month-to-date)");
   const m2 = result.rows.find((r) => r.memberId === "m2")!;
 
   check("period starts at the open month", result.periodStart, "2025-03-01");
-  // 20 days x 60 meals, plus 300 khala, 375 utilities (250 elec + 125 wifi), 375 extra.
-  check("20 full meals to date", m1.cost, 20 * 60 + 300 + 375 + 375);
-  check("balance = 5000 - 2250", m1.balance, 2750);
-  check("member with no deposit is in deficit", m2.balance, -2250);
+  // 20 of March's 31 days. Meals accrue per day; Khala, electricity and wifi are
+  // flat monthly amounts accrued by the same 20/31 fraction.
+  //   20 x 60 = 1200
+  //   Khala     round(300 x 20/31) = 194
+  //   Elec+wifi round(250 x 20/31) + round(125 x 20/31) = 161 + 81 = 242
+  //   Extra     the pool is already date-bounded, so it is not pro-rated: 375
+  check("20 full meals to date", m1.cost, 1200 + 194 + 242 + 375);
+  check("balance = 5000 - 2011", m1.balance, 5000 - (1200 + 194 + 242 + 375));
+  check("member with no deposit is in deficit", m2.balance, -(1200 + 194 + 242 + 375));
   check("deficit count", result.summary.membersInDeficit, 3);
-  // m3 is solo in a 2-bed room: 400 khala and 625 utilities.
+  // m3 is solo in a 2-bed room: Khala round(400 x 20/31) = 258 and
+  // round(250 x 2 x 20/31) + round(125 x 20/31) = 323 + 81 = 404.
   const m3 = result.rows.find((r) => r.memberId === "m3")!;
-  check("solo member's month-to-date cost", m3.cost, 20 * 60 + 400 + 625 + 375);
+  check("solo member's month-to-date cost", m3.cost, 1200 + 258 + 404 + 375);
   check(
-    "mess-wide balance = 2750 - 2250 - 2600 - 2250",
+    "mess-wide balance = 5000 - 2011 - 2011 - 2237 - 2011",
     result.summary.balance,
-    -4350,
+    5000 - 2011 - 2011 - 2237 - 2011,
   );
 }
 
@@ -617,10 +643,10 @@ section("Running balance after a closed month");
   const m1 = result.rows.find((r) => r.memberId === "m1")!;
   check("period resumes after the closed month", result.periodStart, "2025-04-01");
   check("opening balance comes from the closed month", m1.openingBalance, 2165);
-  // Meal costs accrue day by day (5 x 60), while the month-level flat charges
-  // (Khala here) are billed in full for the in-progress month.
-  check("5 April days at 60, plus the flat monthly Khala", m1.cost, 5 * 60 + 300);
-  check("balance = 2165 - 600", m1.balance, 1565);
+  // Meal costs accrue day by day (5 x 60), and the month-level flat charges
+  // accrue too: Khala round(300 x 5/30) = 50 rather than the whole 300.
+  check("5 April days at 60, plus 5 days of accrued Khala", m1.cost, 5 * 60 + 50);
+  check("balance = 2165 - 350", m1.balance, 1815);
 }
 
 // ---------------------------------------------------------------------------
@@ -903,14 +929,449 @@ section("Open period starts where the data starts");
   const m3 = result.rows.find((r) => r.memberId === "m3")!;
   const m4 = result.rows.find((r) => r.memberId === "m4")!;
 
-  // m1: Feb 10-28 (19 days) + Mar 1-5 (5 days) = 24 full days at 60,
-  // plus one month's Khala in each of February and March.
-  check("February's meals are included", m1.cost, 24 * 60 + 300 + 300);
+  // m1: Feb 10-28 (19 days) + Mar 1-5 (5 days) = 24 full days at 60 = 1440,
+  // plus February's Khala in full (that month is over: 300) and March's Khala
+  // accrued over 5 of its 31 days: round(300 x 5/31) = 48.
+  check("February's meals are included", m1.cost, 24 * 60 + 300 + 48);
   // The others never had a status recorded, so they only carry month charges:
-  // Khala normal twice for the shared/1-cap rooms, solo twice for m3.
-  check("no status means only month-level charges (shared room)", m2.cost, 600);
-  check("no status means only month-level charges (alone in a 2-bed)", m3.cost, 800);
-  check("no status means only month-level charges (1-bed room)", m4.cost, 600);
+  // Khala normal in full for February plus 5/31 of it in March, solo for m3.
+  check("no status means only month-level charges (shared room)", m2.cost, 300 + 48);
+  check("no status means only month-level charges (alone in a 2-bed)", m3.cost, 400 + 65);
+  check("no status means only month-level charges (1-bed room)", m4.cost, 300 + 48);
+}
+
+// ---------------------------------------------------------------------------
+// FIX 6 — flat monthly charges accrue day by day
+// ---------------------------------------------------------------------------
+
+section("Flat monthly charges accrue day by day");
+{
+  const base = {
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [] as GuestMealData[],
+    rateCards: [RATE_CARD],
+  };
+
+  // Day 10 of a 31-day month. Every flat charge is a tenth-ish of the month.
+  const tenth = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-10" });
+  const t1 = tenth.perMember.get("m1")!;
+  check("day 10 of 31: Khala accrued, not billed in full", t1.khalaAmount, Math.round((300 * 10) / 31));
+  check("day 10 of 31: electricity accrued", t1.electricityAmount, Math.round((250 * 10) / 31));
+  check("day 10 of 31: wifi accrued", t1.wifiAmount, Math.round((125 * 10) / 31));
+  check("day 10 of 31: 10 days of meals", t1.mealAmount, 10 * 60);
+  check(
+    "day 10 of 31 is nowhere near a full month of flat charges",
+    t1.khalaElecWifiAmount < 300 + 375,
+    true,
+  );
+
+  // Day one of the month: one day of everything, not a whole month.
+  const first = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-01" });
+  const f1 = first.perMember.get("m1")!;
+  check("day 1 of 31: one day of Khala", f1.khalaAmount, Math.round(300 / 31));
+  check("day 1 of 31: one day of electricity", f1.electricityAmount, Math.round(250 / 31));
+  check("day 1 of 31: one day of meals", f1.mealAmount, 60);
+  check("day 1 of 31: one day of wifi", f1.wifiAmount, Math.round(125 / 31));
+
+  // A month that has finished still bills in full, so settlements are unchanged.
+  const finished = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-04-15" });
+  const d1 = finished.perMember.get("m1")!;
+  check("a finished month bills Khala in full", d1.khalaAmount, 300);
+  check("a finished month bills the full electricity share", d1.electricityAmount, 250);
+  check("a finished month bills the full wifi share", d1.wifiAmount, 125);
+  check("a finished month bills the full extra share", finished.perMember.get("m3")!.khalaAmount, 400);
+
+  // A late joiner only accrues from their own first day.
+  const lateJoiner = member("m9", "C", { joinDate: "2025-03-25" });
+  const arrived = computeMonth({
+    month: "2025-03",
+    members: [lateJoiner],
+    rooms: ROOMS,
+    changes: [{ memberId: "m9", date: "2025-03-25", status: "FULL", sehri: false }],
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [RATE_CARD],
+    today: "2025-03-25",
+  });
+  check("a member who arrived today pays one day of Khala", arrived.perMember.get("m9")!.khalaAmount, Math.round(300 / 31));
+  check("a member who arrived today pays one day of meals", arrived.perMember.get("m9")!.mealAmount, 60);
+
+  // The extra pool is already built from dated line items, so it is NOT
+  // pro-rated again — it grows as items land rather than being charged up front.
+  const earlyPool = computeMonth({ ...base, extras: MARCH_EXTRAS, bills: [], today: "2025-03-05" });
+  const latePool = computeMonth({ ...base, extras: MARCH_EXTRAS, bills: [], today: "2025-03-31" });
+  check("the pool only contains items dated so far", earlyPool.perMember.get("m1")!.extraAmount, 250);
+  check("the pool grows as more items land", latePool.perMember.get("m1")!.extraAmount, 375);
+
+  // Billing a month — closing it, or previewing that close — charges the flat
+  // charges in full even when the month has not finished. Otherwise closing a
+  // month on the 10th would permanently under-charge everyone by 21/31.
+  const billing = computeMonth({
+    ...base,
+    extras: [],
+    bills: BILLS,
+    finalize: true,
+    today: "2025-03-10",
+  });
+  check("finalize: Khala is billed in full mid-month", billing.perMember.get("m1")!.khalaAmount, 300);
+  check("finalize: electricity is billed in full", billing.perMember.get("m1")!.electricityAmount, 250);
+  check("finalize: wifi is billed in full", billing.perMember.get("m1")!.wifiAmount, 125);
+  check("finalize: a solo member's Khala is billed in full", billing.perMember.get("m3")!.khalaAmount, 400);
+  check("finalize: meals still stop at today", billing.perMember.get("m1")!.mealAmount, 10 * 60);
+  check(
+    "finalize does not leak into the live view of the same month",
+    computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-10" }).perMember.get("m1")!
+      .khalaAmount,
+    Math.round((300 * 10) / 31),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FIX 5 — recurring rows are part of the day's total before it is stored
+// ---------------------------------------------------------------------------
+
+section("Confirm-then-materialise ordering");
+{
+  const planned = autoExtraRowsFor("2025-03-05", RATE_CARD);
+  check("a confirmed day carries both recurring rows", planned.map((row) => row.category), [
+    "RECURRING_DAILY",
+    "MANAGER_FEE",
+  ]);
+  check("the manager fee is added on top of the daily Extra", planned.map((row) => row.amount), [300, 30]);
+  check("both rows are flagged for the daily budget", planned.every((row) => row.showInDailyBudget), true);
+
+  const dayBefore = computeDayTotals({
+    date: "2025-03-05",
+    members: MEMBERS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: [],
+    rateCard: RATE_CARD,
+    today: "2025-03-31",
+  });
+  const dayAfter = computeDayTotals({
+    date: "2025-03-05",
+    members: MEMBERS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: planned,
+    rateCard: RATE_CARD,
+    today: "2025-03-31",
+  });
+  check("without the recurring rows the day is understated", dayBefore.extraAmount, 0);
+  check("merging the planned rows gives the slip's figure", dayAfter.extraAmount, 330);
+  check(
+    "the stored budget gains exactly the recurring costs",
+    dayAfter.totalBudget - dayBefore.totalBudget,
+    330,
+  );
+
+  // Idempotency: a day saved twice must not double-count, and a row that was
+  // deliberately turned off must not come back.
+  check("both rows are pending on a fresh day", pendingAutoExtraRows("2025-03-05", RATE_CARD, []).length, 2);
+  check(
+    "an already-recorded row is not added again",
+    pendingAutoExtraRows(
+      "2025-03-05",
+      RATE_CARD,
+      planned.map((row) => row.sourceKey),
+    ).length,
+    0,
+  );
+  check(
+    "a voided row is not resurrected",
+    pendingAutoExtraRows("2025-03-05", RATE_CARD, [planned[0].sourceKey]).map(
+      (row) => row.category,
+    ),
+    ["MANAGER_FEE"],
+  );
+  check("a missing rate card plans nothing", autoExtraRowsFor("2025-03-05", null), []);
+  check(
+    "a zeroed rate card plans nothing",
+    autoExtraRowsFor("2025-03-05", {
+      ...RATE_CARD,
+      dailyExtraAmount: 0,
+      managerDailyFee: 0,
+    }),
+    [],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FIX 1 / FIX 8 — month locks and what a delete would destroy
+// ---------------------------------------------------------------------------
+
+section("Month locks");
+{
+  const closed = closedMonthSet(["2025-01", "2025-02"]);
+
+  check("a date in a closed month is locked", closedMonthFor(closed, "2025-02-14"), "2025-02");
+  check("a date in an open month is not locked", closedMonthFor(closed, "2025-03-01"), null);
+  check("isMonthClosed agrees for a closed month", isMonthClosed(closed, "2025-02-28"), true);
+  check("isMonthClosed agrees for an open month", isMonthClosed(closed, "2025-03-01"), false);
+  check("nothing is locked when no month is closed", isMonthClosed(closedMonthSet([]), "2025-02-14"), false);
+
+  const loss = historyLoss(
+    ["2025-02-01", "2025-02-02", "2025-03-01", "2025-04-05"],
+    closed,
+  );
+  check("every record is counted", loss.total, 4);
+  check("only records in unclosed months are at risk", loss.unclosed, 2);
+  check("the unclosed months are listed oldest first", loss.unclosedMonths, ["2025-03", "2025-04"]);
+  check("records in closed months are safe to lose", historyLoss(["2025-01-05", "2025-02-05"], closed).unclosed, 0);
+  check("no records means no risk", historyLoss([], closed).unclosed, 0);
+}
+
+// ---------------------------------------------------------------------------
+// FIX 3 — settlement never skips an unclosed month
+// ---------------------------------------------------------------------------
+
+section("Settlement sequencing");
+{
+  const activity = monthsWithActivity({
+    changes: [{ date: "2025-01-10" }],
+    guestMeals: [],
+    deposits: [],
+    extras: [],
+    bills: [],
+  });
+  check("activity months are collected", [...activity].sort(), ["2025-01"]);
+  check(
+    "voided extras do not count as activity",
+    [...monthsWithActivity({
+      changes: [],
+      guestMeals: [],
+      deposits: [],
+      extras: [{ date: "2025-01-10", voided: true }],
+      bills: [],
+    })],
+    [],
+  );
+  check(
+    "bills and confirmed bazar days count as activity",
+    [...monthsWithActivity({
+      changes: [],
+      guestMeals: [],
+      deposits: [],
+      extras: [],
+      bills: [{ month: "2025-02" }],
+      bazarDates: ["2025-03-04"],
+    })].sort(),
+    ["2025-02", "2025-03"],
+  );
+
+  const nothingClosed = closedMonthSet([]);
+  check(
+    "the first month ever needs nothing closed before it",
+    requiredPrecedingClose({ month: "2025-01", closedMonths: nothingClosed, activityMonths: activity }),
+    null,
+  );
+  check(
+    "February must wait for January",
+    requiredPrecedingClose({ month: "2025-02", closedMonths: nothingClosed, activityMonths: activity }),
+    "2025-01",
+  );
+  check(
+    "once January is closed, February is free",
+    requiredPrecedingClose({
+      month: "2025-02",
+      closedMonths: closedMonthSet(["2025-01"]),
+      activityMonths: activity,
+    }),
+    null,
+  );
+  // An empty month in between still has to be closed, otherwise its carry-forward
+  // would be skipped.
+  check(
+    "an empty in-between month still has to be closed",
+    requiredPrecedingClose({
+      month: "2025-03",
+      closedMonths: closedMonthSet(["2025-01"]),
+      activityMonths: activity,
+    }),
+    "2025-02",
+  );
+  check(
+    "a month with no earlier activity needs nothing closed",
+    requiredPrecedingClose({
+      month: "2025-05",
+      closedMonths: nothingClosed,
+      activityMonths: monthsWithActivity({
+        changes: [{ date: "2025-05-02" }],
+        guestMeals: [],
+        deposits: [],
+        extras: [],
+        bills: [],
+      }),
+    }),
+    null,
+  );
+
+  const settlements = [
+    { memberId: "m1", month: "2025-01", openingBalance: 0, closingBalance: 100 },
+    { memberId: "m1", month: "2025-02", openingBalance: 100, closingBalance: 40 },
+    { memberId: "m2", month: "2025-02", openingBalance: 0, closingBalance: -25 },
+  ];
+  const fromFebruary = openingBalancesFor({
+    month: "2025-03",
+    closedMonths: closedMonthSet(["2025-01", "2025-02"]),
+    settlements,
+  });
+  check(
+    "opening balances come from the immediately preceding month",
+    [...fromFebruary.entries()].sort(),
+    [
+      ["m1", 40],
+      ["m2", -25],
+    ],
+  );
+  check(
+    "an older closing balance is NOT reused when the previous month is open",
+    openingBalancesFor({
+      month: "2025-03",
+      closedMonths: closedMonthSet(["2025-01"]),
+      settlements,
+    }).size,
+    0,
+  );
+  check(
+    "the first month of the ledger opens at zero",
+    openingBalancesFor({ month: "2025-01", closedMonths: nothingClosed, settlements }).size,
+    0,
+  );
+
+  // Reopening an older month leaves later closed months holding stale figures,
+  // so closing an older month while a later one is closed has to be refused.
+  check(
+    "months closed after this one are flagged",
+    laterClosedMonthsFor("2025-02", closedMonthSet(["2025-01", "2025-03", "2025-04"])),
+    ["2025-03", "2025-04"],
+  );
+  check(
+    "nothing later is flagged for the newest closed month",
+    laterClosedMonthsFor("2025-04", closedMonthSet(["2025-01", "2025-04"])),
+    [],
+  );
+  check(
+    "nothing later is flagged when no later month is closed",
+    laterClosedMonthsFor("2025-04", closedMonthSet(["2025-01", "2025-02"])),
+    [],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FIX 4 — the closed-month register is a frozen snapshot
+// ---------------------------------------------------------------------------
+
+section("Frozen register snapshot");
+{
+  const live = mealRegisterForMonth({
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    today: "2025-03-31",
+  });
+  const snapshot: RegisterSnapshot = { days: live.days, rows: live.rows };
+
+  // It is stored as jsonb, so it has to survive a round-trip unchanged.
+  const roundTripped = JSON.parse(JSON.stringify(snapshot)) as RegisterSnapshot;
+  check("the snapshot survives a JSON round-trip", roundTripped, snapshot);
+  check("every day column is preserved", roundTripped.days.length, 31);
+  check(
+    "per-member totals are preserved",
+    roundTripped.rows.find((row) => row.memberId === "m1")!.fullCount,
+    31,
+  );
+  check(
+    "per-day cells are preserved",
+    roundTripped.rows.find((row) => row.memberId === "m1")!.cells[0].status,
+    "FULL",
+  );
+
+  // The frozen register must agree with the frozen ledger stored beside it.
+  const computation = computeMonth({
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [RATE_CARD],
+    today: "2025-03-31",
+  });
+  const mismatches = roundTripped.rows.filter((row) => {
+    const cost = computation.perMember.get(row.memberId);
+    if (!cost) return false;
+    return cost.fullMealCount !== row.fullCount || cost.halfMealCount !== row.halfCount;
+  });
+  check("the frozen register matches the frozen ledger", mismatches.length, 0);
+}
+
+// ---------------------------------------------------------------------------
+// FIX 7 — password policy and the optional solo wifi toggle
+// ---------------------------------------------------------------------------
+
+section("Password policy and solo wifi toggle");
+{
+  check("a short password is rejected", passwordProblem("short") !== null, true);
+  check("the old default is rejected", passwordProblem("admin") !== null, true);
+  check("another well-known default is rejected", passwordProblem("password") !== null, true);
+  check("a repeated character is rejected", passwordProblem("aaaaaaaaaa") !== null, true);
+  check("padding cannot smuggle a default through", passwordProblem("  ADMIN  ") !== null, true);
+  check("a reasonable password is accepted", passwordProblem("khala-300-taka"), null);
+  check("isWeakPassword agrees", isWeakPassword("12345678"), true);
+
+  let threw = false;
+  try {
+    assertStrongPassword("admin", "ADMIN_PASSWORD");
+  } catch {
+    threw = true;
+  }
+  check("assertStrongPassword refuses a default", threw, true);
+
+  let accepted = true;
+  try {
+    assertStrongPassword("a-long-enough-passphrase", "ADMIN_PASSWORD");
+  } catch {
+    accepted = false;
+  }
+  check("assertStrongPassword accepts a real password", accepted, true);
+
+  // The solo wifi multiplier is an optional per-mess toggle. It has to reach the
+  // month calculation, not just apportionUtilities.
+  const base = {
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [] as GuestMealData[],
+    extras: [] as ExtraItemData[],
+    bills: BILLS,
+    rateCards: [RATE_CARD],
+    today: "2025-03-31",
+  };
+  const singleWifi = computeMonth(base);
+  const doubleWifi = computeMonth({ ...base, soloWifiMultiplier: 2 });
+
+  check("default: a solo member pays the single wifi share", singleWifi.perMember.get("m3")!.wifiAmount, 125);
+  check("toggle on: a solo member pays double wifi", doubleWifi.perMember.get("m3")!.wifiAmount, 250);
+  check("the toggle leaves a shared-room member alone", doubleWifi.perMember.get("m1")!.wifiAmount, 125);
+  check(
+    "the toggle raises the solo member's month by exactly the extra wifi share",
+    doubleWifi.perMember.get("m3")!.totalCost - singleWifi.perMember.get("m3")!.totalCost,
+    125,
+  );
+  check(
+    "the toggle does not touch electricity",
+    doubleWifi.perMember.get("m3")!.electricityAmount,
+    singleWifi.perMember.get("m3")!.electricityAmount,
+  );
 }
 
 // ---------------------------------------------------------------------------

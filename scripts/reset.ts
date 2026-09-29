@@ -11,6 +11,8 @@ import { Pool } from "pg";
 config({ path: ".env" });
 
 const TABLES = [
+  "audit_log",
+  "login_attempts",
   "monthly_settlements",
   "month_closes",
   "deposits",
@@ -25,6 +27,7 @@ const TABLES = [
   "members",
   "rooms",
   "mess_settings",
+  "accounts",
 ];
 
 async function main() {

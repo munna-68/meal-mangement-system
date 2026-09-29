@@ -15,6 +15,13 @@
       "when": 1789589886109,
       "tag": "0001_aberrant_sharon_ventura",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790521550734,
+      "tag": "0002_icy_magus",
+      "breakpoints": true
     }
   ]
 }

@@ -33,6 +33,8 @@ export function SettlementClient({
   month,
   months,
   closed,
+  laterClosedMonths,
+  closeBlock,
   memberCount,
   totalCost,
   totalDeposits,
@@ -41,6 +43,10 @@ export function SettlementClient({
   month: string;
   months: string[];
   closed: boolean;
+  /** Months closed after this one, whose opening balances will go stale. */
+  laterClosedMonths: string[];
+  /** Why this month cannot be closed yet, or null when it can. */
+  closeBlock: string | null;
   memberCount: number;
   totalCost: number;
   totalDeposits: number;
@@ -125,7 +131,11 @@ export function SettlementClient({
               Reopen
             </Button>
           ) : (
-            <Button onClick={() => setConfirming(true)} disabled={pending}>
+            <Button
+              onClick={() => setConfirming(true)}
+              disabled={pending || closeBlock !== null}
+              title={closeBlock ?? undefined}
+            >
               <LockIcon />
               Close {formatMonthDisplay(month)}
             </Button>
@@ -135,8 +145,10 @@ export function SettlementClient({
 
       <p className="text-xs text-muted-foreground">
         {closed
-          ? "These figures are frozen. Editing meals, deposits or bills for this month will not change them."
-          : "This is a live preview. Closing the month freezes these numbers and carries each closing balance into the next month."}
+          ? "These figures are frozen, and the month is locked — the ledger, the meal register and both PDFs all come from the same stored snapshot. Reopen the month to make changes."
+          : closeBlock
+            ? "This is a live preview, but the month cannot be closed yet — see the note below."
+            : "This is a live preview. Closing the month freezes these numbers and carries each closing balance into the next month. A month can only be closed once the month before it has been closed."}
       </p>
 
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
@@ -187,9 +199,37 @@ export function SettlementClient({
             <AlertDialogTitle>
               Reopen {formatMonthDisplay(month)}?
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              This discards the locked snapshot for the month and lets the numbers
-              be recomputed. The next month&rsquo;s opening balances will change.
+            <AlertDialogDescription asChild>
+              <div className="flex flex-col gap-2 text-sm">
+                <p>
+                  This unlocks the month and discards its frozen snapshot — both
+                  the money figures and the meal register. The month becomes
+                  editable again.
+                </p>
+                <p className="font-medium text-foreground">
+                  Every later month&rsquo;s opening balance changes.
+                </p>
+                {laterClosedMonths.length > 0 ? (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    These months are already closed and still hold figures based
+                    on this month&rsquo;s old closing balances. Each will need to
+                    be reopened and closed again to bring the chain back in step:
+                    <ul className="mt-1 list-inside list-disc">
+                      {laterClosedMonths.map((value) => (
+                        <li key={value}>{formatMonthDisplay(value)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">
+                    No later month is closed yet, so nothing downstream depends on
+                    this one.
+                  </p>
+                )}
+                <p className="text-muted-foreground">
+                  Who reopened it and when is recorded in the audit log.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

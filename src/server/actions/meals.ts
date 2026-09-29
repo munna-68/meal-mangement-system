@@ -10,7 +10,9 @@ import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
 import { statusOnDate, type MealStatus } from "@/lib/calc";
 import { isValidDateKey } from "@/lib/dates";
 import { requireSession } from "@/server/auth";
-import { getStatusChanges } from "@/server/queries";
+import { recordAudit } from "@/server/audit";
+import { monthLockError } from "@/server/month-lock";
+import { getMemberNames, getStatusChanges } from "@/server/queries";
 
 const statusSchema = z.object({
   memberId: z.string().min(1),
@@ -24,12 +26,15 @@ const statusSchema = z.object({
  * idempotent.
  */
 export async function setMealStatus(input: z.infer<typeof statusSchema>): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   const parsed = statusSchema.safeParse(input);
   if (!parsed.success) {
     return fail(firstIssue(parsed.error, "Invalid meal status update"));
   }
   const { memberId, date, status } = parsed.data;
+
+  const locked = await monthLockError([date]);
+  if (locked) return fail(locked);
 
   try {
     // Preserve the existing sehri flag for this day when changing the status.
@@ -40,13 +45,30 @@ export async function setMealStatus(input: z.infer<typeof statusSchema>): Promis
       .limit(1);
     const sehri = rows[0]?.sehri ?? false;
 
-    await db
-      .insert(mealStatusChanges)
-      .values({ memberId, date, status, sehri })
-      .onConflictDoUpdate({
-        target: [mealStatusChanges.memberId, mealStatusChanges.date],
-        set: { status },
-      });
+    const names = await getMemberNames([memberId]);
+    const memberName = names.get(memberId) ?? memberId;
+
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(mealStatusChanges)
+        .values({ memberId, date, status, sehri })
+        .onConflictDoUpdate({
+          target: [mealStatusChanges.memberId, mealStatusChanges.date],
+          set: { status },
+        });
+
+      await recordAudit(
+        {
+          actor,
+          action: "meal.status.set",
+          entityType: "member",
+          entityId: memberId,
+          summary: `Set ${memberName} to ${status} from ${date}`,
+          detail: { date, status },
+        },
+        tx,
+      );
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not save the meal status"));
   }
@@ -60,24 +82,45 @@ export async function setSehri(input: {
   date: string;
   sehri: boolean;
 }): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   if (!isValidDateKey(input.date)) return fail("Invalid date");
+
+  const locked = await monthLockError([input.date]);
+  if (locked) return fail(locked);
 
   try {
     const changes = await getStatusChanges();
     const current = statusOnDate(changes, input.memberId, input.date);
-    await db
-      .insert(mealStatusChanges)
-      .values({
-        memberId: input.memberId,
-        date: input.date,
-        status: current.status,
-        sehri: input.sehri,
-      })
-      .onConflictDoUpdate({
-        target: [mealStatusChanges.memberId, mealStatusChanges.date],
-        set: { sehri: input.sehri },
-      });
+
+    const names = await getMemberNames([input.memberId]);
+    const memberName = names.get(input.memberId) ?? input.memberId;
+
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(mealStatusChanges)
+        .values({
+          memberId: input.memberId,
+          date: input.date,
+          status: current.status,
+          sehri: input.sehri,
+        })
+        .onConflictDoUpdate({
+          target: [mealStatusChanges.memberId, mealStatusChanges.date],
+          set: { sehri: input.sehri },
+        });
+
+      await recordAudit(
+        {
+          actor,
+          action: "meal.sehri.set",
+          entityType: "member",
+          entityId: input.memberId,
+          summary: `${input.sehri ? "Marked" : "Cleared"} Sehri for ${memberName} on ${input.date}`,
+          detail: { date: input.date, sehri: input.sehri },
+        },
+        tx,
+      );
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not save the Sehri mark"));
   }
@@ -95,33 +138,57 @@ const guestSchema = z.object({
 
 /** A guest meal is an add-on; it never touches the host's own status. */
 export async function setGuestMeal(input: z.infer<typeof guestSchema>): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   const parsed = guestSchema.safeParse(input);
   if (!parsed.success) {
     return fail(firstIssue(parsed.error, "Invalid guest meal"));
   }
   const { memberId, date, type, count } = parsed.data;
 
+  const locked = await monthLockError([date]);
+  if (locked) return fail(locked);
+
   try {
-    if (count <= 0) {
-      await db
-        .delete(guestMeals)
-        .where(
-          and(
-            eq(guestMeals.memberId, memberId),
-            eq(guestMeals.date, date),
-            eq(guestMeals.type, type),
-          ),
-        );
-    } else {
-      await db
-        .insert(guestMeals)
-        .values({ memberId, date, type, count })
-        .onConflictDoUpdate({
-          target: [guestMeals.memberId, guestMeals.date, guestMeals.type],
-          set: { count },
-        });
-    }
+    const names = await getMemberNames([memberId]);
+    const memberName = names.get(memberId) ?? memberId;
+    const label = type === "GUEST_FULL" ? "full" : "half";
+
+    await db.transaction(async (tx) => {
+      if (count <= 0) {
+        await tx
+          .delete(guestMeals)
+          .where(
+            and(
+              eq(guestMeals.memberId, memberId),
+              eq(guestMeals.date, date),
+              eq(guestMeals.type, type),
+            ),
+          );
+      } else {
+        await tx
+          .insert(guestMeals)
+          .values({ memberId, date, type, count })
+          .onConflictDoUpdate({
+            target: [guestMeals.memberId, guestMeals.date, guestMeals.type],
+            set: { count },
+          });
+      }
+
+      await recordAudit(
+        {
+          actor,
+          action: count <= 0 ? "meal.guest.clear" : "meal.guest.set",
+          entityType: "member",
+          entityId: memberId,
+          summary:
+            count <= 0
+              ? `Removed ${label} guest meals for ${memberName} on ${date}`
+              : `Set ${count} ${label} guest meal${count === 1 ? "" : "s"} for ${memberName} on ${date}`,
+          detail: { date, type, count },
+        },
+        tx,
+      );
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not save the guest meal"));
   }
@@ -134,17 +201,39 @@ export async function clearGuestMeals(input: {
   memberId: string;
   date: string;
 }): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   if (!isValidDateKey(input.date)) return fail("Invalid date");
+
+  const locked = await monthLockError([input.date]);
+  if (locked) return fail(locked);
+
   try {
-    await db
-      .delete(guestMeals)
-      .where(
-        and(eq(guestMeals.memberId, input.memberId), eq(guestMeals.date, input.date)),
+    const names = await getMemberNames([input.memberId]);
+    const memberName = names.get(input.memberId) ?? input.memberId;
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(guestMeals)
+        .where(
+          and(eq(guestMeals.memberId, input.memberId), eq(guestMeals.date, input.date)),
+        );
+
+      await recordAudit(
+        {
+          actor,
+          action: "meal.guest.clearAll",
+          entityType: "member",
+          entityId: input.memberId,
+          summary: `Cleared all guest meals for ${memberName} on ${input.date}`,
+          detail: { date: input.date },
+        },
+        tx,
       );
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not clear the guest meals"));
   }
+
   refresh();
   return ok();
 }
@@ -155,9 +244,12 @@ export async function setMealStatusForMembers(input: {
   date: string;
   status: MealStatus;
 }): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   if (!isValidDateKey(input.date)) return fail("Invalid date");
   if (input.memberIds.length === 0) return ok();
+
+  const locked = await monthLockError([input.date]);
+  if (locked) return fail(locked);
 
   try {
     const existing = await db
@@ -174,20 +266,36 @@ export async function setMealStatusForMembers(input: {
       );
     const sehriByMember = new Map(existing.map((row) => [row.memberId, row.sehri]));
 
-    await db
-      .insert(mealStatusChanges)
-      .values(
-        input.memberIds.map((memberId) => ({
-          memberId,
-          date: input.date,
-          status: input.status,
-          sehri: sehriByMember.get(memberId) ?? false,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: [mealStatusChanges.memberId, mealStatusChanges.date],
-        set: { status: input.status },
-      });
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(mealStatusChanges)
+        .values(
+          input.memberIds.map((memberId) => ({
+            memberId,
+            date: input.date,
+            status: input.status,
+            sehri: sehriByMember.get(memberId) ?? false,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [mealStatusChanges.memberId, mealStatusChanges.date],
+          set: { status: input.status },
+        });
+
+      await recordAudit(
+        {
+          actor,
+          action: "meal.status.bulk",
+          entityType: "day",
+          entityId: input.date,
+          summary: `Set ${input.memberIds.length} member${
+            input.memberIds.length === 1 ? "" : "s"
+          } to ${input.status} on ${input.date}`,
+          detail: { date: input.date, status: input.status, count: input.memberIds.length },
+        },
+        tx,
+      );
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not apply the status to everyone"));
   }
@@ -196,25 +304,57 @@ export async function setMealStatusForMembers(input: {
   return ok();
 }
 
+/**
+ * Puts a whole day back to the default: everyone active eats full.
+ *
+ * Note this writes a *change* row for the date, and because status is sticky
+ * that value carries forward until each member's next change. It is not wired
+ * to any screen today; it stays for administrative use.
+ */
 export async function resetDayToDefault(input: { date: string }): Promise<ActionResult> {
-  await requireSession();
+  const actor = await requireSession();
   if (!isValidDateKey(input.date)) return fail("Invalid date");
+
+  const locked = await monthLockError([input.date]);
+  if (locked) return fail(locked);
+
   try {
-    await db.delete(mealStatusChanges).where(eq(mealStatusChanges.date, input.date));
-    const active = await db.select({ id: members.id }).from(members).where(eq(members.active, true));
-    if (active.length > 0) {
-      await db.insert(mealStatusChanges).values(
-        active.map((member) => ({
-          memberId: member.id,
-          date: input.date,
-          status: "FULL" as MealStatus,
-          sehri: false,
-        })),
+    await db.transaction(async (tx) => {
+      await tx.delete(mealStatusChanges).where(eq(mealStatusChanges.date, input.date));
+      const active = await tx
+        .select({ id: members.id })
+        .from(members)
+        .where(eq(members.active, true));
+
+      if (active.length > 0) {
+        await tx.insert(mealStatusChanges).values(
+          active.map((member) => ({
+            memberId: member.id,
+            date: input.date,
+            status: "FULL" as MealStatus,
+            sehri: false,
+          })),
+        );
+      }
+
+      await recordAudit(
+        {
+          actor,
+          action: "meal.day.reset",
+          entityType: "day",
+          entityId: input.date,
+          summary: `Reset ${input.date} to full meals for ${active.length} active member${
+            active.length === 1 ? "" : "s"
+          }`,
+          detail: { date: input.date, memberCount: active.length },
+        },
+        tx,
       );
-    }
+    });
   } catch (error) {
     return fail(firstIssue(error, "Could not reset the day"));
   }
+
   refresh();
   return ok();
 }

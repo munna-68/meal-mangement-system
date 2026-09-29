@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { MoonStarIcon } from "lucide-react";
 import { updateMessSettings } from "@/server/actions/settings";
+import { AccountsPanel, type AccountRecord } from "./accounts-panel";
 
 export function SettingsClient({
   hostelName: initialName,
@@ -18,12 +19,18 @@ export function SettingsClient({
   ramadanMode: initialRamadan,
   soloElectricityMultiplier: initialSoloElectricity,
   soloWifiMultiplier: initialSoloWifi,
+  accounts,
+  canManageAccounts,
+  currentAccountId,
 }: {
   hostelName: string;
   address: string;
   ramadanMode: boolean;
   soloElectricityMultiplier: number;
   soloWifiMultiplier: number;
+  accounts: AccountRecord[];
+  canManageAccounts: boolean;
+  currentAccountId: string;
 }) {
   const { run, pending, error } = useAction();
   const [hostelName, setHostelName] = useState(initialName);
@@ -135,10 +142,19 @@ export function SettingsClient({
               onChange={(event) => setSoloWifi(event.target.value)}
             />
             <p className="text-[11px] text-muted-foreground">
-              Default 1 — wi-fi is not doubled for a solo member.
+              Default 1 — wi-fi is <strong>not</strong> doubled for a solo
+              member. Set it to 2 to charge a solo member double wi-fi as well.
             </p>
           </div>
         </div>
+
+        <Alert className="mt-3">
+          <AlertDescription className="text-xs">
+            Doubling wi-fi for a solo member is an optional per-mess choice, not
+            a default: the mess normally charges the single wi-fi share. Changing
+            this re-prices every month that has not been closed yet.
+          </AlertDescription>
+        </Alert>
 
         <Alert className="mt-3">
           <AlertDescription className="text-xs">
@@ -171,6 +187,12 @@ export function SettingsClient({
           Changes to Ramadan mode take effect immediately across the app.
         </span>
       </div>
+
+      <AccountsPanel
+        accounts={accounts}
+        canManage={canManageAccounts}
+        currentAccountId={currentAccountId}
+      />
     </div>
   );
 }

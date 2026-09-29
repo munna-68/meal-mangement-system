@@ -1,8 +1,15 @@
 import { and, eq } from "drizzle-orm";
 
-import { db } from "@/db";
+import { db, type Executor } from "@/db";
 import { extraLineItems } from "@/db/schema";
 import { rateCardFor, type RateCardData } from "@/lib/calc";
+import {
+  autoExtraRowsFor,
+  dailyExtraSourceKey,
+  managerFeeSourceKey,
+  pendingAutoExtraRows,
+  type AutoExtraRow,
+} from "@/lib/auto-extras";
 import {
   addDays,
   compare,
@@ -24,58 +31,50 @@ import { getConfirmedBazarDates, getRateCards } from "@/server/queries";
  *
  * Generation is idempotent — the unique `sourceKey` means a day is never
  * double-charged, and a voided day is never resurrected.
+ *
+ * The planner itself is pure and lives in `@/lib/auto-extras`.
  */
 
-export function dailyExtraSourceKey(date: DateKey): string {
-  return `auto:daily-extra:${date}`;
-}
+export {
+  autoExtraRowsFor,
+  dailyExtraSourceKey,
+  managerFeeSourceKey,
+  pendingAutoExtraRows,
+};
+export type { AutoExtraRow };
 
-export function managerFeeSourceKey(date: DateKey): string {
-  return `auto:manager-fee:${date}`;
+/**
+ * Writes the given rows, skipping any that already exist. Takes an executor so
+ * a caller can make this atomic with the record it belongs to.
+ */
+export async function insertAutoExtraRows(
+  rows: AutoExtraRow[],
+  executor: Executor = db,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const inserted = await executor
+    .insert(extraLineItems)
+    .values(
+      rows.map((row) => ({
+        date: row.date,
+        label: row.label,
+        amount: row.amount,
+        category: row.category,
+        showInDailyBudget: row.showInDailyBudget,
+        isAuto: true,
+        sourceKey: row.sourceKey,
+      })),
+    )
+    .onConflictDoNothing({ target: extraLineItems.sourceKey })
+    .returning({ id: extraLineItems.id });
+
+  return inserted.length;
 }
 
 interface AutoExtraPlan {
   day: DateKey;
   card: RateCardData | null;
-}
-
-async function insertAutoExtras(days: AutoExtraPlan[]): Promise<number> {
-  const values: (typeof extraLineItems.$inferInsert)[] = [];
-  for (const { day, card } of days) {
-    if (!card) continue;
-    if (card.dailyExtraAmount > 0) {
-      values.push({
-        date: day,
-        label: "Daily recurring Extra",
-        amount: card.dailyExtraAmount,
-        category: "RECURRING_DAILY",
-        showInDailyBudget: true,
-        isAuto: true,
-        sourceKey: dailyExtraSourceKey(day),
-      });
-    }
-    if (card.managerDailyFee > 0) {
-      values.push({
-        date: day,
-        label: "Manager's daily fee",
-        amount: card.managerDailyFee,
-        category: "MANAGER_FEE",
-        showInDailyBudget: true,
-        isAuto: true,
-        sourceKey: managerFeeSourceKey(day),
-      });
-    }
-  }
-
-  if (values.length === 0) return 0;
-
-  const inserted = await db
-    .insert(extraLineItems)
-    .values(values)
-    .onConflictDoNothing({ target: extraLineItems.sourceKey })
-    .returning({ id: extraLineItems.id });
-
-  return inserted.length;
 }
 
 /** Materialises the recurring costs for every confirmed bazar day in a window. */
@@ -103,7 +102,8 @@ export async function ensureAutoExtrasForRange(
     if (++guard > 2000) break;
   }
 
-  await insertAutoExtras(plans);
+  const rows = plans.flatMap((plan) => autoExtraRowsFor(plan.day, plan.card));
+  await insertAutoExtraRows(rows);
 }
 
 export async function ensureAutoExtrasForMonth(month: MonthKey): Promise<void> {
@@ -132,8 +132,9 @@ export async function setAutoExtraVoided(
   date: DateKey,
   sourceKey: string,
   voided: boolean,
+  executor: Executor = db,
 ): Promise<void> {
-  await db
+  await executor
     .update(extraLineItems)
     .set({ voided })
     .where(

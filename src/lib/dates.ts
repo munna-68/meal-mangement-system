@@ -135,6 +135,20 @@ export function eachDay(from: DateKey, to: DateKey): DateKey[] {
   return out;
 }
 
+/**
+ * Whole days from `from` to `to` inclusive, e.g. 2025-03-01 → 2025-03-31 is 31.
+ * Returns 0 when `to` is before `from`, so a window that has not started yet
+ * contributes nothing rather than a negative count.
+ */
+export function daysBetweenInclusive(from: DateKey, to: DateKey): number {
+  if (compare(from, to) > 0) return 0;
+  const [fy, fm, fd] = parts(from);
+  const [ty, tm, td] = parts(to);
+  const start = Date.UTC(fy, fm - 1, fd);
+  const end = Date.UTC(ty, tm - 1, td);
+  return Math.round((end - start) / 86_400_000) + 1;
+}
+
 /** Lexicographic comparison is chronological for zero-padded date keys. */
 export function compare(a: DateKey, b: DateKey): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -189,6 +203,22 @@ export function formatLongDisplay(key: DateKey): string {
 export function formatMonthDisplay(month: MonthKey): string {
   const [y, m] = month.split("-").map(Number);
   return `${EN_MONTHS[m - 1]} ${y}`;
+}
+
+/** Full timestamp in the mess's timezone, e.g. "27 Sep 2026, 20:14". */
+export function formatTimestamp(
+  value: Date,
+  timeZone: string = APP_TIME_ZONE,
+): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(value);
 }
 
 export function formatMonthLongDisplay(month: MonthKey): string {

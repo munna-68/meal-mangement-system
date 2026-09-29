@@ -9,6 +9,7 @@ import {
   Calculator,
   ClipboardList,
   FileSpreadsheet,
+  HistoryIcon,
   LogOutIcon,
   MenuIcon,
   ReceiptText,
@@ -69,6 +70,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/extras", label: "Extras & Bills", short: "Extras", icon: ReceiptText },
   { href: "/rates", label: "Rate Card", short: "Rates", icon: Tags },
   { href: "/settings", label: "Mess Settings", short: "Settings", icon: Settings },
+  { href: "/audit", label: "Audit Log", short: "Audit", icon: HistoryIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {

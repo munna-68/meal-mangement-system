@@ -26,15 +26,24 @@ npm run db:seed
 npm run dev
 ```
 
-Open http://localhost:3000 and enter the Manager PIN from `ADMIN_PIN` (default `admin`).
+Open http://localhost:3000 and sign in with the owner account created by the
+seed (`ADMIN_USERNAME` / `ADMIN_PASSWORD`). Every manager has their own account —
+there is no shared PIN any more.
 
 ### Environment
 
-| Variable         | Purpose                                                         |
-| ---------------- | --------------------------------------------------------------- |
-| `DATABASE_URL`   | Postgres connection string. Neon's pooled string in production.   |
-| `ADMIN_PIN`      | The single shared Manager PIN that protects the app. Any string.  |
-| `SESSION_SECRET` | Signs the session cookie. Use a long random string.               |
+| Variable              | Purpose                                                              |
+| --------------------- | -------------------------------------------------------------------- |
+| `DATABASE_URL`        | Postgres connection string. Neon's pooled string in production.        |
+| `ADMIN_USERNAME`      | Username for the first owner account, created by `npm run db:seed`.    |
+| `ADMIN_DISPLAY_NAME`  | Display name for that account (optional, defaults to "Mess Owner").    |
+| `ADMIN_PASSWORD`      | Its password. At least 8 characters, and **not** a known default — the |
+|                       | seed refuses to run otherwise.                                         |
+| `SESSION_SECRET`      | Signs the session cookie. Use a long random string.                    |
+
+`ADMIN_PASSWORD` is only read when no account exists yet. After that, manage
+sign-ins from **Mess Settings → Sign-ins**, where an owner can add accounts,
+change roles, reset passwords and clear lockouts.
 
 Generate a secret with:
 
@@ -67,11 +76,12 @@ To start over: `npm run db:reset && npm run db:seed`.
    (`.env` is git-ignored, so Vercel does **not** inherit them — the app will
    fail to sign you in without them):
 
-   | Variable         | Value for Vercel                                        |
-   | ---------------- | ------------------------------------------------------- |
-   | `DATABASE_URL`   | The Neon pooled connection string.                       |
-   | `ADMIN_PIN`      | Your Manager PIN. Starts as `admin` — change it.         |
-   | `SESSION_SECRET` | A fresh long random string (generate the command below). |
+   | Variable             | Value for Vercel                                         |
+   | -------------------- | -------------------------------------------------------- |
+   | `DATABASE_URL`       | The Neon pooled connection string.                        |
+   | `ADMIN_USERNAME`     | The owner's username.                                     |
+   | `ADMIN_PASSWORD`     | A strong password — not a default.                        |
+   | `SESSION_SECRET`     | A fresh long random string (generate the command below).  |
 
 4. Run the migrations once against that database:
 
@@ -79,8 +89,15 @@ To start over: `npm run db:reset && npm run db:seed`.
    DATABASE_URL="postgres://...neon.tech/..." npm run db:migrate
    ```
 
-   The seed is optional in production — it only creates starting rooms, members
-   and the first rate card.
+5. Create the first owner account (and optional starting data):
+
+   ```bash
+   DATABASE_URL="postgres://...neon.tech/..." npm run db:seed
+   ```
+
+   Without an account the app cannot be signed into, so this step is required —
+   not optional — on a fresh database. The seed also creates starting rooms,
+   members and the first rate card if the database is empty.
 
 ## How the money is worked out
 
@@ -97,7 +114,9 @@ and `npm test` covers the rules with hand-computed expected values.
 | Khala is a flat per-head monthly fee (normal / solo rate) | `khalaAmountFor` |
 | Every Extra split evenly across members active that month | `extraPoolForRange` |
 | A member's bill never depends on what the shopper actually spent | `computeMonth` |
+| Flat monthly charges accrue day by day for an in-progress month | `flatChargeFraction` |
 | Balances, carry-forward and deficit detection | `computeRunningBalances` |
+| Closed months refuse writes; the chain must close in order | `src/lib/locks.ts`, `src/server/month-lock.ts` |
 
 Guarantees worth knowing:
 
@@ -105,8 +124,16 @@ Guarantees worth knowing:
   a finished month runs to its last day.
 - **Actual market spending never changes what a member owes.** It only reconciles
   the shopper's cash.
-- **Closing a month freezes it.** The stored snapshot is what is shown; editing
-  meals afterwards does not move it. Reopening is possible but explicit.
+- **Flat charges accrue.** On day 3 of a month a member carries roughly 3/31 of
+  the month's Khala and utility share, not the whole lot. The full amount is
+  charged when the month is closed.
+- **Closing a month locks it.** Every write that could change that month is
+  refused until it is reopened, and the month's meal register is frozen
+  alongside its money, so the ledger PDF and the register PDF always agree.
+- **Months close in order.** A month can only be closed once the month before it
+  has been closed, so no month's carry-forward is ever skipped.
+- **Every change is attributed.** Meal status, deposits, deductions, bills, rate
+  cards and settlement runs record the account that made them; see **Audit Log**.
 - **Past rates are never overwritten.** Creating a rate version closes the
   previous one the day before.
 

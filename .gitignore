@@ -40,6 +40,7 @@ yarn-error.log*
 
 # tooling scratch worktrees (a second checkout of this repo)
 /.kilo/
+/.workbuddy-ai/
 
 # vercel
 .vercel
