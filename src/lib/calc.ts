@@ -906,6 +906,58 @@ export function extraPoolForRange(input: {
   return { total, perMember, memberCount: activeMemberCount };
 }
 
+export interface MonthlyFixedExtraSummary {
+  month: MonthKey;
+  totalDaysInMonth: number;
+  mealDaysRan: number;
+  dailyRate: number;
+  totalDailyExtra: number;
+  boarderCount: number;
+  perBoarderCost: number;
+  managerDailyFee: number;
+  totalManagerFee: number;
+  perBoarderManagerFee: number;
+  combinedPerBoarder: number;
+}
+
+/**
+ * Calculates the monthly fixed extra breakdown based on confirmed meal days and active boarders.
+ * e.g., 28 meal days * ৳300/day = ৳8,400 ÷ 30 boarders = ৳280/boarder.
+ */
+export function computeMonthlyFixedExtraSummary(input: {
+  month: MonthKey;
+  confirmedBazarDaysCount: number;
+  rateCard: RateCardData | null;
+  activeMemberCount: number;
+}): MonthlyFixedExtraSummary {
+  const { month, confirmedBazarDaysCount, rateCard, activeMemberCount } = input;
+  const totalDaysInMonth = daysInMonth(month).length;
+  const mealDaysRan = confirmedBazarDaysCount;
+  const dailyRate = rateCard?.dailyExtraAmount ?? 0;
+  const managerDailyFee = rateCard?.managerDailyFee ?? 0;
+  const totalDailyExtra = mealDaysRan * dailyRate;
+  const perBoarderCost =
+    activeMemberCount > 0 ? roundTaka(totalDailyExtra / activeMemberCount) : 0;
+  const totalManagerFee = mealDaysRan * managerDailyFee;
+  const perBoarderManagerFee =
+    activeMemberCount > 0 ? roundTaka(totalManagerFee / activeMemberCount) : 0;
+  const combinedPerBoarder = perBoarderCost + perBoarderManagerFee;
+
+  return {
+    month,
+    totalDaysInMonth,
+    mealDaysRan,
+    dailyRate,
+    totalDailyExtra,
+    boarderCount: activeMemberCount,
+    perBoarderCost,
+    managerDailyFee,
+    totalManagerFee,
+    perBoarderManagerFee,
+    combinedPerBoarder,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Whole-month computation
 // ---------------------------------------------------------------------------

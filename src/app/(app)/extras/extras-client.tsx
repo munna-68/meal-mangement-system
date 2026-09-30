@@ -1,7 +1,5 @@
-"use client";
-
 import { useState } from "react";
-import { CheckIcon, TrashIcon, XIcon } from "lucide-react";
+import { CalculatorIcon, CheckIcon, SparklesIcon, TrashIcon, XIcon } from "lucide-react";
 
 import { cn } from "cn";
 
@@ -18,7 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EXTRA_CATEGORY_LABELS, type ExtraCategory } from "@/lib/calc";
+import {
+  EXTRA_CATEGORY_LABELS,
+  type ExtraCategory,
+  type MonthlyFixedExtraSummary,
+} from "@/lib/calc";
 import { formatDisplay, formatMonthDisplay, todayKey } from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
 import {
@@ -56,10 +58,12 @@ export function ExtrasClient({
   extras,
   bills,
   months,
+  fixedSummaries,
 }: {
   extras: ExtraRecord[];
   bills: BillRecord[];
   months: string[];
+  fixedSummaries: MonthlyFixedExtraSummary[];
 }) {
   const { run, pending } = useAction();
   const [date, setDate] = useState(todayKey());
@@ -68,14 +72,147 @@ export function ExtrasClient({
   const [category, setCategory] = useState<ExtraCategory>("ONE_OFF");
   const [showInDailyBudget, setShowInDailyBudget] = useState(false);
 
+  const [summaryMonth, setSummaryMonth] = useState(months[0] ?? "");
+  const [itemFilter, setItemFilter] = useState<"ALL" | "MANUAL" | "AUTO">("ALL");
+
   const [billMonth, setBillMonth] = useState(months[0] ?? "");
   const [electricity, setElectricity] = useState("");
   const [wifi, setWifi] = useState("");
 
+  const currentSummary =
+    fixedSummaries.find((s) => s.month === summaryMonth) ?? fixedSummaries[0];
   const selectedBill = bills.find((bill) => bill.month === billMonth);
+
+  const manualCount = extras.filter((item) => !item.isAuto).length;
+  const autoCount = extras.filter((item) => item.isAuto).length;
+
+  const filteredExtras = extras.filter((item) => {
+    if (itemFilter === "MANUAL") return !item.isAuto;
+    if (itemFilter === "AUTO") return item.isAuto;
+    return true;
+  });
 
   return (
     <div className="flex flex-col gap-6">
+      <section className="rounded-xl border bg-card shadow-sm">
+        <header className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <CalculatorIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+              <h2 className="font-heading text-sm font-semibold">
+                Fixed Cost: Daily Recurring Extra
+              </h2>
+              <Badge
+                variant="secondary"
+                className="bg-emerald-50 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+              >
+                Auto-calculated
+              </Badge>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {formatTaka(currentSummary?.dailyRate ?? 300)} is cut per day the meal
+              actually runs, pooled and divided equally across all active boarders.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="summary-month" className="whitespace-nowrap text-xs text-muted-foreground">
+              Month:
+            </Label>
+            <Select value={summaryMonth} onValueChange={setSummaryMonth}>
+              <SelectTrigger id="summary-month" className="h-8 w-[150px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((m) => (
+                  <SelectItem key={m} value={m} className="text-xs">
+                    {formatMonthDisplay(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </header>
+
+        {currentSummary ? (
+          <div className="flex flex-col gap-4 p-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <span className="text-xs text-muted-foreground">Meal Days Ran</span>
+                <div className="mt-1 font-heading text-xl font-bold tabular-nums">
+                  {currentSummary.mealDaysRan}
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                    / {currentSummary.totalDaysInMonth} days
+                  </span>
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  confirmed bazar days
+                </span>
+              </div>
+
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <span className="text-xs text-muted-foreground">Daily Cut Rate</span>
+                <div className="mt-1 font-heading text-xl font-bold tabular-nums">
+                  {formatTaka(currentSummary.dailyRate)}
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  per day meal runs
+                </span>
+              </div>
+
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <span className="text-xs text-muted-foreground">Total Extra Cut</span>
+                <div className="mt-1 font-heading text-xl font-bold tabular-nums text-primary">
+                  {formatTaka(currentSummary.totalDailyExtra)}
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  {currentSummary.mealDaysRan} × {formatTaka(currentSummary.dailyRate)}
+                </span>
+              </div>
+
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <span className="text-xs text-muted-foreground">Active Boarders</span>
+                <div className="mt-1 font-heading text-xl font-bold tabular-nums">
+                  {currentSummary.boarderCount}
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  members in hostel
+                </span>
+              </div>
+
+              <div className="col-span-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 sm:col-span-1 dark:border-emerald-800 dark:bg-emerald-950/20">
+                <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                  Cost Per Head
+                </span>
+                <div className="mt-1 font-heading text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {formatTaka(currentSummary.perBoarderCost)}
+                </div>
+                <span className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
+                  {formatTaka(currentSummary.totalDailyExtra)} ÷{" "}
+                  {currentSummary.boarderCount || 1}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5 rounded-lg border bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <SparklesIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span>
+                  <strong>Automatically Calculated:</strong> Each confirmed bazar adds{" "}
+                  {formatTaka(currentSummary.dailyRate)} to the pool. You do not need to log it
+                  manually below.
+                </span>
+              </div>
+              {currentSummary.managerDailyFee > 0 ? (
+                <span className="text-muted-foreground">
+                  Manager fee: +{formatTaka(currentSummary.totalManagerFee)} (
+                  {formatTaka(currentSummary.perBoarderManagerFee)}/head)
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
       <section className="rounded-xl border bg-card shadow-sm">
         <header className="border-b px-4 py-3">
           <h2 className="font-heading text-sm font-semibold">Log an extra cost</h2>
@@ -84,6 +221,12 @@ export function ExtrasClient({
             split evenly across members at month end.
           </p>
         </header>
+        <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+          💡 <strong>Notice:</strong> The {formatTaka(currentSummary?.dailyRate ?? 300)}/day
+          recurring extra is automatically calculated above whenever Today&rsquo;s Bazar is
+          confirmed. Use this form <strong>only</strong> for occasional one-off expenses (e.g.,
+          repairs, feast extras, meeting snacks, cleaning items).
+        </div>
         <div className="grid gap-3 p-4 lg:grid-cols-[1fr_1.6fr_1fr_1.2fr_auto] lg:items-end">
           <div className="flex flex-col gap-2">
             <Label htmlFor="extra-date">Date</Label>
@@ -171,11 +314,39 @@ export function ExtrasClient({
       </section>
 
       <section className="rounded-xl border bg-card shadow-sm">
-        <header className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-heading text-sm font-semibold">Extra items</h2>
-          <span className="text-xs text-muted-foreground">
-            {extras.length} total
-          </span>
+        <header className="flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-heading text-sm font-semibold">Extra items</h2>
+            <p className="text-xs text-muted-foreground">
+              {extras.length} total ({manualCount} manual, {autoCount} recurring from bazar)
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant={itemFilter === "ALL" ? "default" : "outline"}
+              className="h-7 text-xs"
+              onClick={() => setItemFilter("ALL")}
+            >
+              All ({extras.length})
+            </Button>
+            <Button
+              size="sm"
+              variant={itemFilter === "MANUAL" ? "default" : "outline"}
+              className="h-7 text-xs"
+              onClick={() => setItemFilter("MANUAL")}
+            >
+              Manual only ({manualCount})
+            </Button>
+            <Button
+              size="sm"
+              variant={itemFilter === "AUTO" ? "default" : "outline"}
+              className="h-7 text-xs"
+              onClick={() => setItemFilter("AUTO")}
+            >
+              Auto items ({autoCount})
+            </Button>
+          </div>
         </header>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -190,7 +361,7 @@ export function ExtrasClient({
               </tr>
             </thead>
             <tbody>
-              {extras.map((item) => (
+              {filteredExtras.map((item) => (
                 <tr key={item.id} className="border-t">
                   <td className="px-4 py-2 tabular-nums">{formatDisplay(item.date)}</td>
                   <td
@@ -229,21 +400,34 @@ export function ExtrasClient({
                     {formatTaka(item.amount)}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="Delete extra"
-                      onClick={() => run(() => deleteExtra(item.id))}
-                    >
-                      <TrashIcon />
-                    </Button>
+                    {item.isAuto ? (
+                      <span
+                        className="text-[11px] text-muted-foreground italic px-2 select-none"
+                        title="Auto-generated from bazar confirmation. Turn off on Today's Bazar if needed."
+                      >
+                        bazar auto
+                      </span>
+                    ) : (
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Delete extra"
+                        onClick={() => run(() => deleteExtra(item.id))}
+                      >
+                        <TrashIcon />
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
-              {extras.length === 0 ? (
+              {filteredExtras.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                    Nothing logged yet.
+                    {itemFilter === "ALL"
+                      ? "Nothing logged yet."
+                      : itemFilter === "MANUAL"
+                        ? "No manual extras logged."
+                        : "No auto items generated yet for this period."}
                   </td>
                 </tr>
               ) : null}

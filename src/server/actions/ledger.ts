@@ -72,11 +72,17 @@ export async function updateExtra(
     // An edit can move an item between months, so both the old and the new
     // month have to be open.
     const [existing] = await db
-      .select({ date: extraLineItems.date })
+      .select({ date: extraLineItems.date, isAuto: extraLineItems.isAuto })
       .from(extraLineItems)
       .where(eq(extraLineItems.id, input.id))
       .limit(1);
     if (!existing) return fail("That extra item no longer exists.");
+
+    if (existing.isAuto) {
+      return fail(
+        "Auto-generated items cannot be edited manually. Their amounts come from the rate card in force on that day.",
+      );
+    }
 
     const locked = await monthLockError([existing.date, parsed.data.date]);
     if (locked) return fail(locked);
@@ -118,11 +124,22 @@ export async function deleteExtra(id: string): Promise<ActionResult> {
   const actor = await requireSession();
   try {
     const [existing] = await db
-      .select({ date: extraLineItems.date, label: extraLineItems.label, amount: extraLineItems.amount })
+      .select({
+        date: extraLineItems.date,
+        label: extraLineItems.label,
+        amount: extraLineItems.amount,
+        isAuto: extraLineItems.isAuto,
+      })
       .from(extraLineItems)
       .where(eq(extraLineItems.id, id))
       .limit(1);
     if (!existing) return fail("That extra item no longer exists.");
+
+    if (existing.isAuto) {
+      return fail(
+        "Auto-generated items cannot be deleted here. If this day should not carry the recurring charge, turn it off on Today's Bazar.",
+      );
+    }
 
     const locked = await monthLockError([existing.date]);
     if (locked) return fail(locked);

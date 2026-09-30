@@ -9,7 +9,7 @@
  */
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 const DATA_DIR = resolve(process.cwd(), ".pglite");
@@ -18,6 +18,16 @@ const HOST = "127.0.0.1";
 
 async function main() {
   mkdirSync(DATA_DIR, { recursive: true });
+
+  // Remove a stale postmaster.pid left behind by a previous crash or forced
+  // kill.  PGlite treats its presence as a running-instance lock and aborts
+  // with "RuntimeError: Aborted()" — but in this single-process dev setup
+  // there is never a real concurrent instance, so it is always safe to delete.
+  const pidFile = resolve(DATA_DIR, "postmaster.pid");
+  if (existsSync(pidFile)) {
+    console.warn("[dev-db] Removing stale postmaster.pid from a previous unclean shutdown.");
+    rmSync(pidFile);
+  }
 
   const db = new PGlite(DATA_DIR);
   await db.waitReady;

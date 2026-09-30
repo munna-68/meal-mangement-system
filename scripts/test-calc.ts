@@ -9,6 +9,7 @@ import {
   buildSettlementRows,
   computeDayTotals,
   computeMonth,
+  computeMonthlyFixedExtraSummary,
   computeRunningBalances,
   extraPoolForRange,
   isSoloInSharedRoom,
@@ -486,6 +487,49 @@ section("Extra pool");
     activeMemberCount: 4,
   });
   check("voided items are excluded from the pool", withVoided.total, 1500);
+
+  // Fixed daily extra summary (user spec: 28 days @ ৳300 = ৳8,400 ÷ 30 members = ৳280/head)
+  const fixedSummary = computeMonthlyFixedExtraSummary({
+    month: "2026-09",
+    confirmedBazarDaysCount: 28,
+    rateCard: { ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 0 },
+    activeMemberCount: 30,
+  });
+  check("fixed extra summary reports correct total days in month", fixedSummary.totalDaysInMonth, 30);
+  check("fixed extra summary reports 28 meal days ran", fixedSummary.mealDaysRan, 28);
+  check("fixed extra summary reports 300 daily rate", fixedSummary.dailyRate, 300);
+  check("fixed extra summary total is 28 * 300 = 8400", fixedSummary.totalDailyExtra, 8400);
+  check("fixed extra summary boarder count is 30", fixedSummary.boarderCount, 30);
+  check("fixed extra summary cost per head is 8400 / 30 = 280", fixedSummary.perBoarderCost, 280);
+
+  // With manager fee included (e.g. ৳30/day)
+  const withManagerFee = computeMonthlyFixedExtraSummary({
+    month: "2026-09",
+    confirmedBazarDaysCount: 28,
+    rateCard: { ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 },
+    activeMemberCount: 30,
+  });
+  check("fixed extra summary includes manager fee total 28 * 30 = 840", withManagerFee.totalManagerFee, 840);
+  check("fixed extra summary per boarder manager fee is 28", withManagerFee.perBoarderManagerFee, 28);
+  check("fixed extra summary combined per boarder is 280 + 28 = 308", withManagerFee.combinedPerBoarder, 308);
+
+  // Edge cases: 0 boarders and 0 meal days
+  const zeroBoarders = computeMonthlyFixedExtraSummary({
+    month: "2026-09",
+    confirmedBazarDaysCount: 28,
+    rateCard: { ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 },
+    activeMemberCount: 0,
+  });
+  check("fixed extra summary safely handles 0 boarders", zeroBoarders.perBoarderCost, 0);
+
+  const zeroDays = computeMonthlyFixedExtraSummary({
+    month: "2026-09",
+    confirmedBazarDaysCount: 0,
+    rateCard: { ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 },
+    activeMemberCount: 30,
+  });
+  check("fixed extra summary safely handles 0 meal days", zeroDays.totalDailyExtra, 0);
+  check("fixed extra summary safely handles 0 meal days per head", zeroDays.perBoarderCost, 0);
 }
 
 // ---------------------------------------------------------------------------
