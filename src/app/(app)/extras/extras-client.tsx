@@ -31,10 +31,12 @@ import {
   type MonthlyFixedExtraSummary,
 } from "@/lib/calc";
 import { formatDisplay, formatMonthDisplay, monthStart, todayKey } from "@/lib/dates";
-import { formatTaka } from "@/lib/money";
+import { formatTaka, sum } from "@/lib/money";
 import {
   createExtra,
   deleteExtra,
+  deleteKhalaPayment,
+  logKhalaPayment,
   saveUtilityBill,
 } from "@/server/actions/ledger";
 
@@ -53,8 +55,22 @@ export interface BillRecord {
   month: string;
   electricity: number | null;
   wifi: number | null;
-  /** Khala for the month, from the rate card — it is not entered by hand. */
-  khala: number | null;
+}
+
+export interface KhalaPaymentRecord {
+  id: string;
+  date: string;
+  amount: number;
+  notes: string | null;
+}
+
+/** What has been paid for one month's khala, and what the rate card expects. */
+export interface KhalaMonthRecord {
+  month: string;
+  paid: number;
+  target: number;
+  outstanding: number;
+  count: number;
 }
 
 export interface MonthCostPoolSummary {
@@ -96,12 +112,16 @@ const CATEGORIES: ExtraCategory[] = [
 export function ExtrasClient({
   extras,
   bills,
+  khalaPayments,
+  khalaMonths,
   months,
   poolSummaries,
   fixedSummaries,
 }: {
   extras: ExtraRecord[];
   bills: BillRecord[];
+  khalaPayments: KhalaPaymentRecord[];
+  khalaMonths: KhalaMonthRecord[];
   months: string[];
   poolSummaries: MonthCostPoolSummary[];
   fixedSummaries: MonthlyFixedExtraSummary[];
@@ -131,12 +151,29 @@ export function ExtrasClient({
       ? String(initialBill.wifi)
       : "",
   );
+  const [khalaDate, setKhalaDate] = useState(todayKey());
+  const [khalaAmount, setKhalaAmount] = useState("");
+  const [khalaNotes, setKhalaNotes] = useState("");
+
+  // The ceiling and the outstanding figure both follow the *payment date*, not
+  // the bill month picker: khala is entered as a dated payment, so the month it
+  // lands in is the one it is counted against.
+  const khalaTargetMonth = khalaDate.slice(0, 7);
+  const khalaMonthRecord = khalaMonths.find((r) => r.month === khalaTargetMonth);
+  const khalaPaidTotal = sum(
+    khalaPayments
+      .filter((payment) => payment.date.slice(0, 7) === khalaTargetMonth)
+      .map((payment) => payment.amount),
+  );
+  const khalaTarget = khalaMonthRecord?.target ?? 0;
+  const khalaRemaining = Math.max(0, khalaTarget - khalaPaidTotal);
 
   const currentSummary =
     fixedSummaries.find((s) => s.month === summaryMonth) ?? fixedSummaries[0];
   const currentPool =
     poolSummaries.find((p) => p.month === summaryMonth) ?? poolSummaries[0];
   const selectedBill = bills.find((bill) => bill.month === billMonth);
+  const selectedKhalaForBill = khalaMonths.find((r) => r.month === billMonth);
 
   // Synthesize utility items into unified items list
   const safeExtras = extras.filter((item) => item.category !== "MANAGER_FEE");
@@ -174,22 +211,26 @@ export function ExtrasClient({
         canDelete: false,
       });
     }
-    if (bill.khala !== null && bill.khala > 0) {
-      items.push({
-        id: `utility-khala-${bill.month}`,
-        date: dateStr,
-        label: `Khala for the month (${monthLabel})`,
-        categoryLabel: "Utility pool",
-        pool: "UTILITY",
-        showInDailyBudget: false,
-        amount: bill.khala,
-        isAuto: true,
-        voided: false,
-        canDelete: false,
-      });
-    }
     return items;
   });
+
+  // Each khala payment is a real, dated, deletable record — unlike the old
+  // synthetic "Khala for the month" row, which had no row behind it at all and so
+  // could never be removed once the rate card had produced a figure for it.
+  const khalaItems: UnifiedItem[] = khalaPayments.map((payment) => ({
+    id: `khala-${payment.id}`,
+    date: payment.date,
+    label: payment.notes?.trim()
+      ? `Khala paid — ${payment.notes.trim()}`
+      : "Khala paid",
+    categoryLabel: "Utility pool",
+    pool: "UTILITY",
+    showInDailyBudget: false,
+    amount: payment.amount,
+    isAuto: false,
+    voided: false,
+    canDelete: true,
+  }));
 
   const extraUnifiedItems: UnifiedItem[] = safeExtras.map((item) => ({
     id: item.id,
@@ -204,12 +245,14 @@ export function ExtrasClient({
     canDelete: !item.isAuto,
   }));
 
-  const allItems: UnifiedItem[] = [...extraUnifiedItems, ...utilityItems].sort(
-    (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0),
-  );
+  const allItems: UnifiedItem[] = [
+    ...extraUnifiedItems,
+    ...utilityItems,
+    ...khalaItems,
+  ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
   const extrasCount = extraUnifiedItems.length;
-  const utilityCount = utilityItems.length;
+  const utilityCount = utilityItems.length + khalaItems.length;
   const manualCount = extraUnifiedItems.filter((i) => !i.isAuto).length;
   const autoCount = allItems.filter((i) => i.isAuto).length;
 
@@ -598,7 +641,7 @@ export function ExtrasClient({
                     {formatTaka(item.amount)}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    {item.pool === "UTILITY" ? (
+                    {item.pool === "UTILITY" && !item.canDelete ? (
                       <span
                         className="text-[11px] text-muted-foreground italic px-2 select-none"
                         title="Monthly utility bill. Manage in the Utility bills section below."
@@ -616,8 +659,18 @@ export function ExtrasClient({
                       <Button
                         size="icon-sm"
                         variant="ghost"
-                        aria-label="Delete extra"
-                        onClick={() => run(() => deleteExtra(item.id))}
+                        aria-label={
+                          item.pool === "UTILITY"
+                            ? "Delete khala payment"
+                            : "Delete extra"
+                        }
+                        onClick={() =>
+                          run(() =>
+                            item.pool === "UTILITY"
+                              ? deleteKhalaPayment({ id: item.id.replace(/^khala-/, "") })
+                              : deleteExtra(item.id),
+                          )
+                        }
                       >
                         <TrashIcon />
                       </Button>
@@ -639,15 +692,81 @@ export function ExtrasClient({
 
       <section className="rounded-xl border bg-card shadow-sm">
         <header className="border-b px-4 py-3">
-          <h2 className="font-heading text-sm font-semibold">Log utility bills</h2>
+          <h2 className="font-heading text-sm font-semibold">Log khala payments</h2>
           <p className="text-xs text-muted-foreground">
-            Monthly bills for electricity, wifi, and khala. Everything logged here is
-            apportioned by room capacity and charged once per month in Settlement.
+            Khala is handed over in instalments, so log each payment on the day you
+            make it. Members only carry the khala you have actually paid, split by
+            room capacity.
           </p>
         </header>
-        <div className="mx-4 mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-2.5 text-xs text-blue-900 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-200">
-          💡 <strong>Notice:</strong> Utility bills are charged once per month, not on a day.
-          Enter the bill amounts for the month; they are apportioned across members according to room capacity and added to Settlement.
+        <div className="mx-4 mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-blue-200 bg-blue-50/60 p-2.5 text-xs text-blue-900 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-200">
+          <span>
+            Paid for {formatMonthDisplay(khalaTargetMonth)}:{" "}
+            <strong className="tabular-nums">{formatTaka(khalaPaidTotal)}</strong>
+          </span>
+          <span>
+            Rate card says a full month:{" "}
+            <strong className="tabular-nums">{formatTaka(khalaTarget)}</strong>
+          </span>
+          <span>
+            Still outstanding:{" "}
+            <strong className="tabular-nums">{formatTaka(khalaRemaining)}</strong>
+          </span>
+        </div>
+        <div className="grid gap-3 p-4 lg:grid-cols-[1fr_1fr_1.6fr_auto] lg:items-end">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="khala-date">Paid on</Label>
+            <Input
+              id="khala-date"
+              type="date"
+              value={khalaDate}
+              onChange={(event) => setKhalaDate(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="khala-amount">Amount</Label>
+            <Input
+              id="khala-amount"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={khalaAmount}
+              placeholder="0"
+              onChange={(event) => setKhalaAmount(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="khala-notes">Note (optional)</Label>
+            <Input
+              id="khala-notes"
+              value={khalaNotes}
+              placeholder="e.g. first instalment"
+              onChange={(event) => setKhalaNotes(event.target.value)}
+            />
+          </div>
+          <Button
+            disabled={pending || khalaAmount === "" || Number(khalaAmount) <= 0}
+            onClick={() =>
+              run(
+                () =>
+                  logKhalaPayment({
+                    date: khalaDate,
+                    amount: Number(khalaAmount),
+                    notes: khalaNotes || undefined,
+                    idempotencyKey: idempotency.current(),
+                  }),
+                {
+                  onSuccess: () => {
+                    idempotency.reset();
+                    setKhalaAmount("");
+                    setKhalaNotes("");
+                  },
+                },
+              )
+            }
+          >
+            Log payment
+          </Button>
         </div>
         <div className="grid gap-3 p-4 lg:grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] lg:items-end">
           <div className="flex flex-col gap-2">
@@ -700,8 +819,10 @@ export function ExtrasClient({
           <div className="flex flex-col gap-2">
             <Label>Khala</Label>
             <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm tabular-nums text-muted-foreground">
-              {selectedBill?.khala ? formatTaka(selectedBill.khala) : "—"}
-              <span className="block text-[11px]">from the rate card</span>
+              {selectedKhalaForBill && selectedKhalaForBill.paid > 0
+                ? formatTaka(selectedKhalaForBill.paid)
+                : "—"}
+              <span className="block text-[11px]">paid so far — logged above</span>
             </p>
           </div>
           <Button
@@ -743,9 +864,9 @@ export function ExtrasClient({
         <header className="border-b px-4 py-3">
           <h2 className="font-heading text-sm font-semibold">Utility bill records</h2>
           <p className="text-xs text-muted-foreground">
-          Electricity and Wifi are entered here. Khala is not entered — it comes
-          from the rate card — and the last column is the whole
-          Khala+Wifi+Electricity pool for the month.
+            Electricity and wifi are entered once for the month. Khala is the amount
+            you have actually paid, and the rate card figure next to it is what a
+            full month is expected to come to.
           </p>
         </header>
         <div className="overflow-x-auto">
@@ -755,16 +876,19 @@ export function ExtrasClient({
                 <th className="px-4 py-2 text-left font-medium">Month</th>
                 <th className="px-4 py-2 text-right font-medium">Electricity</th>
                 <th className="px-4 py-2 text-right font-medium">Wifi</th>
-                <th className="px-4 py-2 text-right font-medium">Khala</th>
+                <th className="px-4 py-2 text-right font-medium">Khala paid</th>
+                <th className="px-4 py-2 text-right font-medium">Khala target</th>
+                <th className="px-4 py-2 text-right font-medium">Outstanding</th>
                 <th className="px-4 py-2 text-right font-medium">Khala+Wifi+Electricity</th>
               </tr>
             </thead>
             <tbody>
               {bills.map((bill) => {
+                const khalaRecord = khalaMonths.find((r) => r.month === bill.month);
                 const elec = bill.electricity ?? 0;
                 const wifi = bill.wifi ?? 0;
-                const khalaVal = bill.khala ?? 0;
-                const combined = elec + wifi + khalaVal;
+                const khalaPaid = khalaRecord?.paid ?? 0;
+                const combined = elec + wifi + khalaPaid;
 
                 return (
                   <tr key={bill.month} className="border-t">
@@ -777,8 +901,22 @@ export function ExtrasClient({
                     <td className="px-4 py-2 text-right tabular-nums">
                       {bill.wifi === null ? "—" : formatTaka(bill.wifi)}
                     </td>
+                    <td className="px-4 py-2 text-right font-semibold tabular-nums">
+                      {khalaPaid > 0 ? formatTaka(khalaPaid) : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                      {khalaRecord && khalaRecord.target > 0
+                        ? formatTaka(khalaRecord.target)
+                        : "—"}
+                    </td>
                     <td className="px-4 py-2 text-right tabular-nums">
-                      {bill.khala === null ? "—" : formatTaka(bill.khala)}
+                      {khalaRecord && khalaRecord.outstanding > 0 ? (
+                        <span className="text-amber-700 dark:text-amber-400">
+                          {formatTaka(khalaRecord.outstanding)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-right font-semibold tabular-nums">
                       {formatTaka(combined)}

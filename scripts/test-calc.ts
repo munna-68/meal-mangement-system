@@ -14,6 +14,7 @@ import {
   extraPoolForRange,
   isSoloInSharedRoom,
   khalaAmountFor,
+  apportionKhala,
   occupancyForRange,
   rateCardFor,
   resolveStatusTimeline,
@@ -27,6 +28,7 @@ import {
   type StatusChangeData,
   type GuestMealData,
   type UtilityBillData,
+  type KhalaPaymentData,
   type DepositData,
 } from "../src/lib/calc";
 import {
@@ -142,6 +144,13 @@ const BILLS: UtilityBillData[] = [
   { month: "2025-03", type: "ELECTRICITY", amount: 1000 },
   { month: "2025-03", type: "WIFI", amount: 500 },
 ];
+
+/**
+ * March's khala paid in full on the 10th: m1 300 + m2 300 + m3 400 (alone in a
+ * 2-bed room) + m4 300 = 1300. Tests that assert khala charges pass this; tests
+ * about the instalment mechanics pass their own figures.
+ */
+const MARCH_KHALA: KhalaPaymentData[] = [{ date: "2025-03-10", amount: 1300 }];
 
 const MARCH_EXTRAS: ExtraItemData[] = [
   {
@@ -506,6 +515,102 @@ section("Khala fee");
     khalaAmountFor({ member: MEMBERS[3], occupancy, rateCard: RATE_CARD }),
     300,
   );
+
+  // `khalaAmountFor` is the rate card's intent: it sets the ceiling and the split
+  // weights. What a member is actually charged is the share of khala that has
+  // genuinely been paid, apportioned on those weights.
+  const base = {
+    members: MEMBERS,
+    rooms: ROOMS,
+    from: "2025-03-01" as const,
+    to: "2025-03-31" as const,
+    rateCard: RATE_CARD,
+    today: "2025-03-31" as const,
+  };
+
+  const nothingPaid = apportionKhala({ ...base, payments: [] });
+  check("a month with no payments charges no khala at all", nothingPaid.totalPaid, 0);
+  check(
+    "no payments means nobody carries khala",
+    [...nothingPaid.byMember.values()].every((amount) => amount === 0),
+    true,
+  );
+  check("the target is still the rate card's 1300", nothingPaid.monthlyTarget, 1300);
+  check("all 1300 is outstanding", nothingPaid.outstanding, 1300);
+  check("a month with nothing paid is not fully paid", nothingPaid.fullyPaid, false);
+
+  const fullyPaid = apportionKhala({ ...base, payments: MARCH_KHALA });
+  check("a fully paid month charges the full 1300", fullyPaid.totalPaid, 1300);
+  check("nothing outstanding once paid in full", fullyPaid.outstanding, 0);
+  check("a fully paid month is marked paid", fullyPaid.fullyPaid, true);
+  check("shared member carries the normal rate", fullyPaid.byMember.get("m1"), 300);
+  check("solo member carries the solo rate", fullyPaid.byMember.get("m3"), 400);
+  check(
+    "shares add back up to the amount paid exactly",
+    [...fullyPaid.byMember.values()].reduce((a, b) => a + b, 0),
+    1300,
+  );
+
+  // The whole point: khala arrives in pieces, and nobody is charged for the piece
+  // that has not been handed over yet.
+  const partial = apportionKhala({
+    ...base,
+    payments: [
+      { date: "2025-03-05", amount: 500 },
+      { date: "2025-03-20", amount: 300 },
+    ],
+  });
+  check("two instalments sum to what was paid", partial.totalPaid, 800);
+  check("the unpaid remainder is outstanding", partial.outstanding, 500);
+  check("still not fully paid mid-month", partial.fullyPaid, false);
+  // 800 paid of a 1300 target: a shared member carries 300/1300 of it, a solo
+  // member 400/1300 — the same proportions the rate card sets, of the smaller sum.
+  check(
+    "a shared member carries their proportion of what was paid",
+    partial.byMember.get("m1"),
+    185,
+  );
+  check(
+    "a solo member carries the solo proportion of what was paid",
+    partial.byMember.get("m3"),
+    246,
+  );
+  check(
+    "a partly paid month apportions exactly what was paid",
+    [...partial.byMember.values()].reduce((a, b) => a + b, 0),
+    800,
+  );
+
+  // Instalments landing in different months belong to different months, so last
+  // month's khala never leaks into this month's cost.
+  const marchOnly = apportionKhala({
+    ...base,
+    payments: [
+      ...MARCH_KHALA,
+      { date: "2025-04-02", amount: 9999 },
+    ],
+  });
+  check("a payment dated next month is ignored", marchOnly.totalPaid, 1300);
+
+  // Overpayment is refused at the action layer, but the apportionment still has
+  // to behave: nothing outstanding, and the whole amount shared out.
+  const overpaid = apportionKhala({ ...base, payments: [{ date: "2025-03-05", amount: 2000 }] });
+  check("overpaying never leaves a negative outstanding", overpaid.outstanding, 0);
+  check("overpaid counts as fully paid", overpaid.fullyPaid, true);
+  check(
+    "an overpaid month still shares out exactly what was paid",
+    [...overpaid.byMember.values()].reduce((a, b) => a + b, 0),
+    2000,
+  );
+
+  // No rate card means no ceiling, so nothing can be charged and nothing logged.
+  const noCard = apportionKhala({ ...base, rateCard: null, payments: MARCH_KHALA });
+  check("no rate card means no khala target", noCard.monthlyTarget, 0);
+  check(
+    "no rate card means nobody carries khala",
+    [...noCard.byMember.values()].every((amount) => amount === 0),
+    true,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -661,6 +766,7 @@ section("Monthly computation");
     guestMeals: [],
     extras: MARCH_EXTRAS,
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     rateCards: [RATE_CARD],
     today: "2025-03-31",
   });
@@ -696,6 +802,7 @@ section("Settlement rows and balance carry-forward");
     guestMeals: [],
     extras: MARCH_EXTRAS,
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     rateCards: [RATE_CARD],
     today: "2025-03-31",
   });
@@ -756,6 +863,7 @@ section("Running balance (month-to-date)");
     guestMeals: [],
     extras: MARCH_EXTRAS,
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     rateCards: [RATE_CARD],
     deposits,
     settlements: [],
@@ -799,6 +907,7 @@ section("Running balance after a closed month");
     guestMeals: [],
     extras: [],
     bills: [],
+    khalaPayments: [{ date: "2025-04-02", amount: 1300 }],
     rateCards: [RATE_CARD],
     deposits: [],
     settlements: [
@@ -835,6 +944,7 @@ section("In-progress month stops at today");
     guestMeals: [],
     extras: MARCH_EXTRAS,
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     rateCards: [RATE_CARD],
     today: "2025-03-20",
   });
@@ -851,6 +961,7 @@ section("In-progress month stops at today");
     guestMeals: [],
     extras: MARCH_EXTRAS,
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     rateCards: [RATE_CARD],
     today: "2025-04-15",
   });
@@ -1083,6 +1194,10 @@ section("Open period starts where the data starts");
     guestMeals: [],
     extras: [],
     bills: [],
+    khalaPayments: [
+      { date: "2025-02-05", amount: 1300 },
+      { date: "2025-03-02", amount: 1300 },
+    ],
     rateCards: [RATE_CARD],
     deposits: [],
     settlements: [],
@@ -1116,7 +1231,7 @@ section("Open period starts where the data starts");
 // FIX 6 — flat monthly charges accrue day by day
 // ---------------------------------------------------------------------------
 
-section("Flat monthly charges are charged in full for the whole month");
+section("Flat monthly charges, and khala only once it is paid");
 {
   const base = {
     month: "2025-03",
@@ -1127,25 +1242,27 @@ section("Flat monthly charges are charged in full for the whole month");
     rateCards: [RATE_CARD],
   };
 
-  // Day 10 of a 31-day month. The flat charges are already the whole month;
-  // only the meals are still counting up.
-  const tenth = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-10" });
+  // Day 10 of a 31-day month, the day the month's whole khala was paid. The flat
+  // electricity and wifi charges are already the whole month; only the meals are
+  // still counting up.
+  const tenth = computeMonth({ ...base, extras: [], bills: BILLS, khalaPayments: MARCH_KHALA, today: "2025-03-10" });
   const t1 = tenth.perMember.get("m1")!;
   check("day 10 of 31: Khala is the full month", t1.khalaAmount, 300);
   check("day 10 of 31: electricity is the full month", t1.electricityAmount, 200);
   check("day 10 of 31: wifi is the full month", t1.wifiAmount, 125);
   check("day 10 of 31: meals are only the days that have happened", t1.mealAmount, 10 * 60);
 
-  // Day one of the month: the same flat charges, one day of meals.
+  // Day one of the month, before any khala has been paid: the same flat
+  // electricity and wifi, and no khala at all until there is some to charge.
   const first = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-01" });
   const f1 = first.perMember.get("m1")!;
-  check("day 1 of 31: Khala is the full month", f1.khalaAmount, 300);
+  check("day 1 of 31, khala not yet paid: nothing is charged", f1.khalaAmount, 0);
   check("day 1 of 31: electricity is the full month", f1.electricityAmount, 200);
   check("day 1 of 31: wifi is the full month", f1.wifiAmount, 125);
   check("day 1 of 31: one day of meals", f1.mealAmount, 60);
 
   // A finished month bills exactly the same flat charges.
-  const finished = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-04-15" });
+  const finished = computeMonth({ ...base, extras: [], bills: BILLS, khalaPayments: MARCH_KHALA, today: "2025-04-15" });
   const d1 = finished.perMember.get("m1")!;
   check("a finished month bills Khala in full", d1.khalaAmount, 300);
   check("a finished month bills the full electricity share", d1.electricityAmount, 200);
@@ -1163,10 +1280,17 @@ section("Flat monthly charges are charged in full for the whole month");
     guestMeals: [],
     extras: [],
     bills: [],
+    // On the 25th, alone in the 1-bed room C, the khala paid that day was the
+    // solo-in-a-shared-room rate for the one person it covered.
+    khalaPayments: [{ date: "2025-03-25", amount: 400 }],
     rateCards: [RATE_CARD],
     today: "2025-03-25",
   });
-  check("a member who arrived today still pays a full month of Khala", arrived.perMember.get("m9")!.khalaAmount, 300);
+  check(
+    "a member who arrived today carries the khala paid that day",
+    arrived.perMember.get("m9")!.khalaAmount,
+    400,
+  );
   check("a member who arrived today pays one day of meals", arrived.perMember.get("m9")!.mealAmount, 60);
 
   // The extra pool is built from dated line items, so it grows as items land
@@ -1182,6 +1306,7 @@ section("Flat monthly charges are charged in full for the whole month");
     ...base,
     extras: [],
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     finalize: true,
     today: "2025-03-10",
   });
@@ -1192,7 +1317,7 @@ section("Flat monthly charges are charged in full for the whole month");
   check("finalize: meals still stop at today", billing.perMember.get("m1")!.mealAmount, 10 * 60);
   check(
     "the live view of the same month charges exactly the same flat charges",
-    computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-10" }).perMember.get("m1")!
+    computeMonth({ ...base, extras: [], bills: BILLS, khalaPayments: MARCH_KHALA, today: "2025-03-10" }).perMember.get("m1")!
       .khalaAmount,
     300,
   );
@@ -1456,6 +1581,7 @@ section("Declared opening balance seeds the first open month");
     guestMeals: [],
     extras: MARCH_EXTRAS,
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     rateCards: [RATE_CARD],
     deposits: [{ memberId: "m1", date: "2025-03-02", amount: 5000 }],
     settlements: [],
@@ -1482,6 +1608,7 @@ section("Declared opening balance seeds the first open month");
     guestMeals: [],
     extras: [],
     bills: [],
+    khalaPayments: [{ date: "2025-04-02", amount: 1300 }],
     rateCards: [RATE_CARD],
     deposits: [],
     settlements,
@@ -1801,6 +1928,7 @@ section("Password policy and solo wifi toggle");
     guestMeals: [] as GuestMealData[],
     extras: [] as ExtraItemData[],
     bills: BILLS,
+    khalaPayments: MARCH_KHALA,
     rateCards: [RATE_CARD],
     today: "2025-03-31",
   };
@@ -1901,15 +2029,19 @@ section("Special rooms");
   };
   const soloMember = [member("m3", "A", { joinDate: "2025-03-01" })];
   const sharedMember = [member("m3", "B", { joinDate: "2025-03-01" })];
+  // Each case is a one-member mess, so the month's khala paid is that member's
+  // own rate: the solo rate when alone, the normal rate when sharing.
   const specialCost = computeMonth({
     ...specialBase,
     members: soloMember,
     rooms: [{ id: "A", number: "101", capacity: 2, solo: true }],
+    khalaPayments: [{ date: "2025-03-10", amount: 400 }],
   });
   const plainCost = computeMonth({
     ...specialBase,
     members: sharedMember,
     rooms: [{ id: "B", number: "102", capacity: 2, solo: false }],
+    khalaPayments: [{ date: "2025-03-10", amount: 400 }],
   });
   check(
     "a special room alone is billed the same as any alone double",
@@ -2035,6 +2167,8 @@ section("Two separate cost pools, khala bill, and manager fee deduction");
     guestMeals: [],
     extras: extrasList,
     bills: utilityBills,
+    // All 12 share a room, so the month's khala target is 12 x 300 = 3,600.
+    khalaPayments: [{ date: "2026-09-10", amount: 3600 }],
     rateCards: [{ ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 }],
     today: "2026-09-30",
   });
@@ -2042,7 +2176,7 @@ section("Two separate cost pools, khala bill, and manager fee deduction");
   check("month extra pool per member is 525", monthCalc.extraPool.perMember, 525);
   check("month electricity total is 2400", monthCalc.totals.electricityAmount, 2400);
   check("month wifi total is 1200", monthCalc.totals.wifiAmount, 1200);
-  check("month khala bill total is 3600", monthCalc.totals.khalaAmount, 3600);
+  check("month khala total is the 3600 actually paid", monthCalc.totals.khalaAmount, 3600);
   check(
     "each member utility share is (2400+1200+3600)/12 = 600",
     monthCalc.perMember.get("m1")?.khalaElecWifiAmount,
@@ -2075,6 +2209,7 @@ section("Two separate cost pools, khala bill, and manager fee deduction");
     guestMeals: [],
     extras: extrasList,
     bills: utilityBills,
+    khalaPayments: [{ date: "2026-09-10", amount: 3600 }],
     rateCards: [{ ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 }],
     deposits: [],
     settlements: [],
@@ -2141,6 +2276,8 @@ section("Room-capacity utility split and exact pool reconciliation");
       { id: "man", date: "2026-09-15", label: "Fridge repair", amount: 6000, category: "ONE_OFF", showInDailyBudget: false, voided: false },
     ],
     bills,
+    // The month's khala actually paid: 8 shared x 300 + 4 solo x 400 = 4,000.
+    khalaPayments: [{ date: "2026-09-12", amount: 4000 }],
     rateCards: [{ ...RATE_CARD, khalaNormalRate: 300, khalaSoloRate: 400 }],
     soloElectricityMultiplier: 2,
     soloWifiMultiplier: 1,
@@ -2178,9 +2315,10 @@ section("Room-capacity utility split and exact pool reconciliation");
   const totalSettlementUtility = [...calc.perMember.values()].reduce((acc, r) => acc + r.khalaElecWifiAmount, 0);
   check("settlement utility column total equals utility pool total (619,000) exactly", totalSettlementUtility, 619000);
 
-  // Verify with an uneven number requiring rounding distribution. Khala comes
-  // from the rate card (8 × 300 + 4 × 400 = 3,600), so the saved Khala bill is
-  // deliberately ignored — a bill cannot change the rate the mess charges.
+  // Verify with an uneven number requiring rounding distribution, on a month
+  // where only part of the khala has been paid. The saved KHALA bill is
+  // deliberately ignored: khala comes from dated payments, so a stray bill row
+  // cannot quietly change what the mess charges.
   const unevenBills: UtilityBillData[] = [
     { month: "2026-09", type: "ELECTRICITY", amount: 600001 },
     { month: "2026-09", type: "WIFI", amount: 15001 },
@@ -2195,15 +2333,24 @@ section("Room-capacity utility split and exact pool reconciliation");
     guestMeals: [],
     extras: [],
     bills: unevenBills,
+    // Only 2,000 of the 4,000 target handed over so far, in two instalments.
+    khalaPayments: [
+      { date: "2026-09-06", amount: 1200 },
+      { date: "2026-09-24", amount: 800 },
+    ],
     rateCards: [{ ...RATE_CARD, khalaNormalRate: 300, khalaSoloRate: 400 }],
     soloElectricityMultiplier: 2,
     soloWifiMultiplier: 1,
     today: "2026-09-30",
   });
-  const unevenPoolTotal = 600001 + 15001 + 8 * 300 + 4 * 400;
+  const unevenPoolTotal = 600001 + 15001 + 2000;
   const unevenSettlementTotal = [...unevenCalc.perMember.values()].reduce((acc, r) => acc + r.khalaElecWifiAmount, 0);
   check("rounding distribution ensures uneven total matches exactly", unevenSettlementTotal, unevenPoolTotal);
-  check("a saved Khala bill does not change the Khala charged", unevenCalc.perMember.get("u1")!.khalaAmount, 300);
+  check(
+    "a saved Khala bill does not change the Khala charged",
+    unevenCalc.perMember.get("u1")!.khalaAmount,
+    150,
+  );
 }
 
 // ---------------------------------------------------------------------------

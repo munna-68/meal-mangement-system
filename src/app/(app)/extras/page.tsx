@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 
 import { PageHeader, Stat } from "@/components/page-header";
 import {
+  apportionKhala,
   computeMonth,
   computeMonthlyFixedExtraSummary,
   isMemberActiveInRange,
-  khalaAmountFor,
-  occupancyForRange,
   rateCardFor,
   type MonthlyFixedExtraSummary,
 } from "@/lib/calc";
@@ -27,6 +26,7 @@ import { ensureAutoExtrasForMonth } from "@/server/auto-extras";
 import {
   getAllConfirmedBazarDates,
   getExtras,
+  getKhalaPayments,
   getMembersWithRooms,
   getRateCards,
   getRooms,
@@ -36,6 +36,7 @@ import {
   ExtrasClient,
   type BillRecord,
   type ExtraRecord,
+  type KhalaMonthRecord,
   type MonthCostPoolSummary,
 } from "./extras-client";
 
@@ -50,10 +51,11 @@ export default async function ExtrasPage() {
   // Ensure the current month's auto extras are materialized for any confirmed bazar days.
   await ensureAutoExtrasForMonth(now);
 
-  const [extras, bills, members, rooms, rateCards, allConfirmed] =
+  const [extras, bills, khalaRows, members, rooms, rateCards, allConfirmed] =
     await Promise.all([
       getExtras(),
       getUtilityBills(),
+      getKhalaPayments(),
       getMembersWithRooms(),
       getRooms(),
       getRateCards(),
@@ -85,35 +87,51 @@ export default async function ExtrasPage() {
 
   const months = Array.from({ length: 12 }, (_, index) => addMonths(now, -index));
 
-  // Khala is set by the rate card, not typed in here: the normal rate for the
-  // month, or the solo rate for somebody alone in a multi-bed room. A figure
-  // typed into a "Khala bill" box would quietly change what every member is
-  // charged, so there is no such box.
-  const billRecords: BillRecord[] = months.map((month) => {
+  // Khala is paid in instalments, so a month carries however much has actually
+  // been handed over — nothing at all until the first payment is logged. The rate
+  // card still sets what a full month should cost, which is the ceiling shown
+  // here and the only thing the "outstanding" figure is measured against.
+  const khalaPayments = khalaRows.map((row) => ({
+    id: row.id,
+    date: row.date,
+    amount: row.amount,
+    notes: row.notes,
+  }));
+  const khalaMonthRecords: KhalaMonthRecord[] = months.map((month) => {
     const from = monthStart(month);
     const to = monthEnd(month);
-    const card = rateCardFor(rateCards, from);
-    const monthMembers = members.filter((m) =>
-      isMemberActiveInRange(m, from, to, today),
-    );
-    const occupancy = occupancyForRange({ members, rooms, from, to, today });
-    const khala = monthMembers.reduce(
-      (total, m) => total + khalaAmountFor({ member: m, occupancy, rateCard: card }),
-      0,
-    );
+    const apportion = apportionKhala({
+      members,
+      rooms,
+      payments: khalaRows,
+      from,
+      to,
+      rateCard: rateCardFor(rateCards, from),
+      today,
+    });
+    return {
+      month,
+      paid: apportion.totalPaid,
+      target: apportion.monthlyTarget,
+      outstanding: apportion.outstanding,
+      count: apportion.memberCount,
+    };
+  });
+  const khalaByMonth = new Map(
+    khalaMonthRecords.map((record) => [record.month, record]),
+  );
 
+  const billRecords: BillRecord[] = months.map((month) => {
     const elecBill = bills.find(
       (bill) => bill.month === month && bill.type === "ELECTRICITY",
     );
     const wifiBill = bills.find(
       (bill) => bill.month === month && bill.type === "WIFI",
     );
-
     return {
       month,
       electricity: elecBill?.amount ?? null,
       wifi: wifiBill?.amount ?? null,
-      khala: khala > 0 ? khala : null,
     };
   });
 
@@ -160,6 +178,7 @@ export default async function ExtrasPage() {
       guestMeals: [],
       extras: safeExtras,
       bills: monthBills,
+      khalaPayments,
       rateCards,
       today,
     });
@@ -215,7 +234,7 @@ export default async function ExtrasPage() {
     <>
       <PageHeader
         title="Extras & Utility Bills"
-        description="The shared cost pools: Extras pool (daily recurring extra + manual charges) and Utility pool (electricity and wifi bills, plus Khala from the rate card)."
+        description="The shared cost pools: Extras pool (daily recurring extra + manual charges) and Utility pool (electricity and wifi bills, plus the Khala you have actually paid)."
       />
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat
@@ -246,6 +265,8 @@ export default async function ExtrasPage() {
       <ExtrasClient
         extras={extraRecords}
         bills={billRecords}
+        khalaPayments={khalaPayments}
+        khalaMonths={[...khalaByMonth.values()]}
         months={months}
         poolSummaries={poolSummaries}
         fixedSummaries={fixedSummaries}

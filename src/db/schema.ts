@@ -342,6 +342,36 @@ export const utilityBills = pgTable(
   (t) => [uniqueIndex("utility_bills_month_type_uq").on(t.month, t.type)],
 );
 
+/**
+ * One instalment of khala actually handed over, on the day it was paid.
+ *
+ * Khala is not a bill that arrives on a date — it is collected in pieces over
+ * the month, so a single monthly figure cannot represent it. Each payment is its
+ * own dated row and a member only ever carries what has genuinely been paid,
+ * apportioned across them. The rate card still sets what a full month *should*
+ * cost (and therefore the ceiling on what may be logged) but no longer charges
+ * anybody for khala that has not left the manager's hand.
+ */
+export const khalaPayments = pgTable(
+  "khala_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    date: dateColumn("date").notNull(),
+    amount: integer("amount").notNull(),
+    notes: text("notes"),
+    /**
+     * A key generated once per submission in the browser and reused until the
+     * save succeeds, so a double-click cannot record the same instalment twice.
+     */
+    idempotencyKey: varchar("idempotency_key", { length: 64 }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("khala_payments_date_idx").on(t.date),
+    uniqueIndex("khala_payments_idempotency_key_uq").on(t.idempotencyKey),
+  ],
+);
+
 export const deposits = pgTable(
   "deposits",
   {
@@ -568,6 +598,7 @@ export const schema = {
   dailyBazarRecords,
   extraLineItems,
   utilityBills,
+  khalaPayments,
   deposits,
   openingBalances,
   monthlySettlements,

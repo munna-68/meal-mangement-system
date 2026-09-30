@@ -7,9 +7,11 @@ import { MealRegisterSheet } from "@/components/meal-register-sheet";
 import { PageHeader, Stat } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  apportionKhala,
   buildSettlementRows,
   computeMonth,
   mealRegisterForMonth,
+  rateCardFor,
   type RegisterSnapshot,
 } from "@/lib/calc";
 import {
@@ -20,6 +22,7 @@ import {
   formatMonthLongDisplay,
   isValidMonthKey,
   monthEnd,
+  monthStart,
 } from "@/lib/dates";
 import { closedMonthSet, laterClosedMonthsFor, monthsWithActivity, openingBalancesFor, requiredPrecedingClose } from "@/lib/locks";
 import { formatTaka } from "@/lib/money";
@@ -60,6 +63,19 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
 
   const snapshot = await loadLedgerSnapshot();
 
+  // Khala is charged only on what has been paid, so a month closed with khala
+  // still outstanding is billed short. Say so rather than letting the shortfall
+  // quietly become nobody's cost.
+  const khalaStanding = apportionKhala({
+    members: snapshot.members,
+    rooms: snapshot.rooms,
+    payments: snapshot.khalaPayments,
+    from: monthStart(month),
+    to: monthEnd(month),
+    rateCard: rateCardFor(snapshot.rateCards, monthStart(month)),
+    today: snapshot.today,
+  });
+
   // Months must be closed in order, because a month's opening balance is the
   // previous month's closing balance. Work out up front whether this one can be
   // closed, so the reason is shown before the user clicks rather than after.
@@ -87,6 +103,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
           deposits: snapshot.deposits,
           extras: snapshot.extras,
           bills: snapshot.bills,
+      khalaPayments: snapshot.khalaPayments,
           bazarDates: await getAllConfirmedBazarDates(),
         }),
       });
@@ -153,6 +170,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       guestMeals: snapshot.guestMeals,
       extras: snapshot.extras,
       bills: snapshot.bills,
+      khalaPayments: snapshot.khalaPayments,
       rateCards: snapshot.rateCards,
       ramadanMode: snapshot.settings.ramadanMode,
       soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
@@ -275,6 +293,22 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
         totalClosing={totals.closing}
       />
 
+      {!isClosed && khalaStanding && khalaStanding.outstanding > 0 ? (
+        <Alert className="mt-4 border-amber-300 bg-amber-50/70">
+          <AlertTriangleIcon className="text-amber-700" />
+          <AlertTitle>
+            {formatTaka(khalaStanding.outstanding)} of khala is still unpaid
+          </AlertTitle>
+          <AlertDescription className="text-xs">
+            Only the {formatTaka(khalaStanding.totalPaid)} actually paid out of{" "}
+            {formatTaka(khalaStanding.monthlyTarget)} is in these figures. Close the
+            month as it stands and the unpaid remainder is not billed to anyone —
+            log it on the Extras &amp; Bills page first if it should be carried
+            into this month.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {closeBlock ? (
         <Alert className="mt-4 border-amber-300 bg-amber-50/70">
           <AlertTriangleIcon className="text-amber-700" />
@@ -307,7 +341,9 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
                 <th className="px-3 py-2 text-right font-medium">Sehri</th>
               ) : null}
               <th className="px-3 py-2 text-right font-medium">Guest F/H</th>
-              <th className="px-3 py-2 text-right font-medium">Khala+Wifi+Electricity</th>
+              <th className="px-3 py-2 text-right font-medium">
+                Khala paid+Wifi+Electricity
+              </th>
               <th className="px-3 py-2 text-right font-medium">Extras share</th>
               <th className="px-3 py-2 text-right font-medium">Total cost</th>
               <th className="px-3 py-2 text-right font-medium">Opening</th>

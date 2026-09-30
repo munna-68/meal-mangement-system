@@ -9,6 +9,7 @@ import {
   deposits,
   extraLineItems,
   guestMeals,
+  khalaPayments,
   mealStatusChanges,
   members,
   messSettings,
@@ -23,6 +24,7 @@ import type {
   DepositData,
   ExtraItemData,
   GuestMealData,
+  KhalaPaymentData,
   MemberData,
   OpeningBalanceData,
   RateCardData,
@@ -283,6 +285,21 @@ export async function getUtilityBills(): Promise<UtilityBillData[]> {
     .from(utilityBills)
     .orderBy(desc(utilityBills.month))
     .then((rows) => rows.map((r) => ({ ...r, month: monthOf(r.month) })));
+}
+
+/** Every dated khala instalment that has actually been paid. */
+export async function getKhalaPayments(): Promise<
+  (KhalaPaymentData & { id: string; notes: string | null })[]
+> {
+  return db
+    .select({
+      id: khalaPayments.id,
+      date: khalaPayments.date,
+      amount: khalaPayments.amount,
+      notes: khalaPayments.notes,
+    })
+    .from(khalaPayments)
+    .orderBy(desc(khalaPayments.date));
 }
 
 export async function getDeposits(): Promise<
@@ -664,6 +681,24 @@ export async function getBazarRecord(date: DateKey) {
 }
 
 /**
+ * What the mess actually laid out on the bazar over a range — `actualExpense`
+ * per confirmed day, not the per-head budget. This is real cash going out of the
+ * drawer, which is what a manager counts against what they are holding.
+ */
+export async function getBazarSpendForRange(
+  from: DateKey,
+  to: DateKey,
+): Promise<number> {
+  const rows = await db
+    .select({ actualExpense: dailyBazarRecords.actualExpense })
+    .from(dailyBazarRecords)
+    .where(
+      and(gte(dailyBazarRecords.date, from), lte(dailyBazarRecords.date, to)),
+    );
+  return rows.reduce((total, row) => total + row.actualExpense, 0);
+}
+
+/**
  * Days with a confirmed bazar record. This is the mess's definition of a day
  * the bazar actually ran, which is what the recurring daily Extra and the
  * manager's fee are charged against.
@@ -704,6 +739,7 @@ export interface LedgerSnapshot {
   guestMeals: GuestMealData[];
   extras: ExtraRow[];
   bills: UtilityBillData[];
+  khalaPayments: (KhalaPaymentData & { id: string; notes: string | null })[];
   deposits: (DepositData & { id: string; notes: string | null })[];
   settlements: SettlementData[];
   openingBalances: OpeningBalanceData[];
@@ -720,6 +756,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     guests,
     extras,
     bills,
+    khalaPaymentRows,
     depositRows,
     settlements,
     openingBalanceRows,
@@ -733,6 +770,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     getGuestMeals(),
     getExtras(),
     getUtilityBills(),
+    getKhalaPayments(),
     getDeposits(),
     getSettlements(),
     getOpeningBalances(),
@@ -750,6 +788,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     guestMeals: guests,
     extras,
     bills,
+    khalaPayments: khalaPaymentRows,
     deposits: depositRows,
     settlements,
     openingBalances: openingBalanceRows,

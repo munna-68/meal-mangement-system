@@ -43,6 +43,13 @@
       "when": 1790796656036,
       "tag": "0005_perfect_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790802386854,
+      "tag": "0006_khala_payments",
+      "breakpoints": true
     }
   ]
 }

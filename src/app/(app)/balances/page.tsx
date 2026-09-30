@@ -13,15 +13,17 @@ import { computeRunningBalances } from "@/lib/calc";
 import {
   addDays,
   formatDisplay,
+  formatMonthDisplay,
   monthEnd,
   monthOf,
   monthStart,
   todayKey,
 } from "@/lib/dates";
-import { formatTaka } from "@/lib/money";
+import { formatTaka, sum } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { ensureAutoExtrasForRange } from "@/server/auto-extras";
 import {
+  getBazarSpendForRange,
   getEarliestActivityDate,
   getLastClosedMonth,
   loadLedgerSnapshot,
@@ -56,6 +58,7 @@ export default async function BalancesPage() {
     guestMeals: snapshot.guestMeals,
     extras: snapshot.extras,
     bills: snapshot.bills,
+      khalaPayments: snapshot.khalaPayments,
     rateCards: snapshot.rateCards,
     deposits: snapshot.deposits,
     settlements: snapshot.settlements,
@@ -72,6 +75,40 @@ export default async function BalancesPage() {
   // column and leave the totals disagreeing with the sum of the rows above them.
   // Left members are dimmed instead, and they appear in the PDF too.
   const rows = result.rows;
+
+  // What the manager should physically be holding, so the mess float can be
+  // checked against the cash in the drawer rather than taken on trust.
+  const bazarSpend = await getBazarSpendForRange(result.periodStart, today);
+  const khalaPaid = sum(
+    snapshot.khalaPayments
+      .filter(
+        (payment) =>
+          payment.date >= result.periodStart && payment.date <= result.periodEnd,
+      )
+      .map((payment) => payment.amount),
+  );
+  const extrasPaid = sum(
+    snapshot.extras
+      .filter(
+        (item) =>
+          !item.voided &&
+          item.date >= result.periodStart &&
+          item.date <= result.periodEnd,
+      )
+      .map((item) => item.amount),
+  );
+  const billsPaid = sum(
+    snapshot.bills
+      .filter((bill) => bill.month >= result.periodStart.slice(0, 7))
+      .map((bill) => bill.amount),
+  );
+  const cashOut = bazarSpend + khalaPaid + extrasPaid + billsPaid;
+  // Deposits are the only money that actually came in during the period. An
+  // opening balance is a carried-forward debt or credit, not cash in the drawer,
+  // so it is deliberately not counted here.
+  const expectedCash = result.summary.deposits - cashOut;
+
+  const currentKhala = result.khalaByMonth.get(today.slice(0, 7));
 
   const activeRows = rows.filter((row) => row.active);
   const leftCount = rows.length - activeRows.length;
@@ -134,7 +171,7 @@ export default async function BalancesPage() {
         <Stat
           label="Accrued cost"
           value={formatTaka(result.summary.cost)}
-          hint="meals + Khala + bills + Extra, accrued to date"
+          hint="meals + paid Khala + bills + Extra, accrued to date"
         />
         <Stat
           label={hasDeclaredOpening ? "Opening balance set" : "Opening carried in"}
@@ -142,6 +179,45 @@ export default async function BalancesPage() {
           hint={openingHint}
         />
       </div>
+
+      <SectionCard
+        title="Cash reconciliation"
+        description="Deposits taken in, less everything actually paid out. This is what should be sitting in the drawer — count it and compare."
+        className="mb-4"
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Stat
+            label="Deposits in"
+            value={formatTaka(result.summary.deposits)}
+            hint="money members paid you"
+          />
+          <Stat
+            label="Bazar spent"
+            value={formatTaka(bazarSpend)}
+            hint="actual expense on confirmed days"
+          />
+          <Stat
+            label="Khala paid"
+            value={formatTaka(khalaPaid)}
+            hint={
+              currentKhala && currentKhala.outstanding > 0
+                ? `${formatTaka(currentKhala.outstanding)} still owed on ${currentKhala.month}`
+                : "fully paid for the month"
+            }
+          />
+          <Stat
+            label="Extras + bills paid"
+            value={formatTaka(extrasPaid + billsPaid)}
+            hint="extras pool plus electricity and wifi"
+          />
+          <Stat
+            label="Expected cash on hand"
+            value={formatTaka(expectedCash)}
+            tone={expectedCash < 0 ? "negative" : "positive"}
+            hint="deposits in, less everything paid out"
+          />
+        </div>
+      </SectionCard>
 
       {result.summary.membersInDeficit > 0 ? (
         <Alert variant="destructive" className="mb-4 border-2">
@@ -279,10 +355,18 @@ export default async function BalancesPage() {
       </SectionCard>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Meals and guest meals are counted day by day. Khala, electricity and wifi
-        are flat monthly charges: every member of a month pays the whole of them,
-        whoever joined late or left early, so these figures do not move during
-        the month and Balances always agrees with Settlement.
+        Meals and guest meals are counted day by day. Electricity and wifi are flat
+        monthly charges: every member of a month pays the whole of them, whoever
+        joined late or left early. Khala is different — it is charged only on
+        what you have actually paid the khala lady, so{" "}
+        {currentKhala && currentKhala.outstanding > 0
+          ? `${formatTaka(
+              currentKhala.outstanding,
+            )} of ${formatMonthDisplay(currentKhala.month)} khala is still outstanding and is not in anyone's cost yet.`
+          : currentKhala
+            ? "this month's khala is fully paid and fully charged."
+            : "no khala has been logged this month."}{" "}
+        Balances always agrees with Settlement.
         {leftCount > 0
           ? ` ${leftCount} member${leftCount === 1 ? "" : "s"} who have left are still listed and still counted in the totals.`
           : ""}{" "}

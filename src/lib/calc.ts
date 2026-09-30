@@ -101,6 +101,17 @@ export interface DepositData {
   amount: number;
 }
 
+/**
+ * One dated instalment of khala actually paid to the khala lady. Khala is
+ * collected in pieces across the month, so a month carries as many of these as
+ * the manager made payments — including none at all, which means the members
+ * carry no khala for that month rather than being charged in advance for it.
+ */
+export interface KhalaPaymentData {
+  date: DateKey;
+  amount: number;
+}
+
 export interface SettlementData {
   memberId: string;
   month: MonthKey;
@@ -889,9 +900,14 @@ export function apportionUtilities(input: {
 }
 
 /**
- * Khala is a flat rate per head: the normal rate when a room is at full
- * occupancy, the higher solo rate when a member is alone in a multi-bed room,
- * and the normal rate in a 1-capacity room.
+ * The khala rate a single member *would* carry for a whole month: the normal
+ * rate when a room is at full occupancy, the higher solo rate when a member is
+ * alone in a multi-bed room, and the normal rate in a 1-capacity room.
+ *
+ * This is the rate the mess *intends* to charge, used for two things only:
+ * what a full month's khala should come to, and the ceiling on how much may be
+ * logged as paid. It is deliberately not the amount anybody is charged — see
+ * `apportionKhala`, which charges only khala that has actually been handed over.
  */
 export function khalaAmountFor(input: {
   member: MemberData;
@@ -905,6 +921,88 @@ export function khalaAmountFor(input: {
   return isSoloInSharedRoom(room)
     ? rateCard.khalaSoloRate
     : rateCard.khalaNormalRate;
+}
+
+export interface KhalaApportionment {
+  /** Every member's own share. The shares always add back up to `totalPaid`. */
+  byMember: Map<string, number>;
+  /** Khala actually handed over this month. */
+  totalPaid: number;
+  /** What the rate card says a full month of khala should cost. */
+  monthlyTarget: number;
+  /** `monthlyTarget − totalPaid`. Never negative: logging is capped at target. */
+  outstanding: number;
+  /** True once the month's khala has been paid in full. */
+  fullyPaid: boolean;
+  memberCount: number;
+}
+
+/**
+ * Splits the khala the manager has actually paid out this month across the
+ * members of the month.
+ *
+ * Khala is handed over in instalments — 5,000 now, the rest later — so the mess
+ * cannot know the month's khala on the 1st and must not charge for it in
+ * advance. Each member therefore carries a share of what has genuinely been
+ * paid, and nobody carries anything for a month where nothing has been paid.
+ * That keeps `balance = opening + deposits − cost` an honest statement about
+ * money: it never counts khala that is still sitting in the mess's hand.
+ *
+ * The split is weighted exactly as the rate card intends, so a solo member
+ * carries the solo *proportion* of the paid khala. The shares always sum to
+ * `totalPaid` exactly, so the mess's own khala outflow is never over- or
+ * under-charged across the board.
+ */
+export function apportionKhala(input: {
+  members: MemberData[];
+  rooms: RoomData[];
+  payments: KhalaPaymentData[];
+  from: DateKey;
+  to: DateKey;
+  rateCard: RateCardData | null;
+  today?: DateKey;
+}): KhalaApportionment {
+  const { members, rooms, payments, from, to, rateCard, today = todayKey() } =
+    input;
+
+  const activeMembers = members.filter((member) =>
+    isMemberActiveInRange(member, from, to, today),
+  );
+  const occupancy = occupancyForRange({ members, rooms, from, to, today });
+
+  // A month's khala is whatever was paid on a date inside that month, however
+  // many instalments it took.
+  const totalPaid = sum(
+    payments
+      .filter(
+        (payment) =>
+          compare(payment.date, from) >= 0 && compare(payment.date, to) <= 0,
+      )
+      .map((payment) => payment.amount),
+  );
+
+  // The rate card's per-head amounts double as the split weights, so a fully
+  // paid month apportions out to exactly the rates on the card and a partly paid
+  // month apportions the same proportions of what has been paid so far.
+  const weights = activeMembers.map((member) =>
+    khalaAmountFor({ member, occupancy, rateCard }),
+  );
+  const monthlyTarget = sum(weights);
+
+  const shares = distributeTaka(totalPaid, weights);
+  const byMember = new Map<string, number>();
+  activeMembers.forEach((member, index) => {
+    byMember.set(member.id, shares[index]);
+  });
+
+  return {
+    byMember,
+    totalPaid,
+    monthlyTarget,
+    outstanding: Math.max(0, monthlyTarget - totalPaid),
+    fullyPaid: totalPaid >= monthlyTarget && monthlyTarget > 0,
+    memberCount: activeMembers.length,
+  };
 }
 
 export interface ExtraPool {
@@ -1042,6 +1140,7 @@ export interface MonthComputation {
   activeMemberIds: string[];
   perMember: Map<string, MemberMonthCost>;
   utilities: UtilityApportionment;
+  khala: KhalaApportionment;
   extraPool: ExtraPool;
   totals: {
     fullMealCount: number;
@@ -1076,6 +1175,8 @@ export interface MonthComputationInput {
   guestMeals: GuestMealData[];
   extras: ExtraItemData[];
   bills: UtilityBillData[];
+  /** Dated khala instalments actually paid. Absent means no khala was paid. */
+  khalaPayments?: KhalaPaymentData[];
   rateCards: RateCardData[];
   ramadanMode?: boolean;
   /** Multiples of the per-head utility share charged to a solo member. */
@@ -1098,6 +1199,7 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     guestMeals,
     extras,
     bills,
+    khalaPayments = [],
     rateCards,
     ramadanMode = false,
     soloElectricityMultiplier = 2,
@@ -1192,7 +1294,6 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     }
   }
 
-  const occupancy = occupancyForRange({ members, rooms, from, to: cutoff, today });
   const utilities = apportionUtilities({
     members,
     rooms,
@@ -1210,18 +1311,21 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     activeMemberIds: activeMembers.map((member) => member.id),
   });
 
-  // Khala comes from the rate card and nothing else: the normal rate, or the
-  // solo rate for somebody alone in a multi-bed room. It is deliberately *not*
-  // driven by a saved Khala bill, so entering one can never quietly change the
-  // rate the mess charges.
+  // Khala is charged on what has actually been handed over, not on what the
+  // rate card says the month will come to. Khala is collected in instalments, so
+  // charging the full month on the 1st would put a debt on every member for money
+  // the mess is still holding. The rate card supplies the split weights and the
+  // ceiling, and nothing else.
   const monthCard = rateCardFor(rateCards, from);
-  const khalaByMember = new Map<string, number>();
-  for (const member of activeMembers) {
-    khalaByMember.set(
-      member.id,
-      khalaAmountFor({ member, occupancy, rateCard: monthCard }),
-    );
-  }
+  const khala = apportionKhala({
+    members,
+    rooms,
+    payments: khalaPayments,
+    from,
+    to: cutoff,
+    rateCard: monthCard,
+    today,
+  });
 
   for (const member of activeMembers) {
     const row = perMember.get(member.id)!;
@@ -1232,7 +1336,7 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     };
     row.electricityAmount = utility.electricity;
     row.wifiAmount = utility.wifi;
-    row.khalaAmount = khalaByMember.get(member.id) ?? 0;
+    row.khalaAmount = khala.byMember.get(member.id) ?? 0;
     row.khalaElecWifiAmount = row.khalaAmount + utility.total;
     row.extraAmount = extraPool.shares.get(member.id) ?? 0;
     row.totalCost =
@@ -1262,6 +1366,7 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     activeMemberIds,
     perMember,
     utilities,
+    khala,
     extraPool,
     totals,
   };
@@ -1343,6 +1448,8 @@ export interface RunningBalanceResult {
   periodStart: DateKey;
   periodEnd: DateKey;
   rows: MemberRunningBalance[];
+  /** Khala paid against, and still owed on, each month of the open period. */
+  khalaByMonth: Map<string, KhalaMonthStanding>;
   summary: {
     openingBalance: number;
     deposits: number;
@@ -1369,6 +1476,8 @@ export function computeRunningBalances(input: {
   guestMeals: GuestMealData[];
   extras: ExtraItemData[];
   bills: UtilityBillData[];
+  /** Dated khala instalments actually paid; absent means none were. */
+  khalaPayments?: KhalaPaymentData[];
   rateCards: RateCardData[];
   deposits: DepositData[];
   settlements: SettlementData[];
@@ -1387,6 +1496,7 @@ export function computeRunningBalances(input: {
     guestMeals,
     extras,
     bills,
+    khalaPayments = [],
     rateCards,
     deposits,
     settlements,
@@ -1441,6 +1551,7 @@ export function computeRunningBalances(input: {
   const costByMember = new Map<string, number>();
   const utilityCostByMember = new Map<string, number>();
   const extraCostByMember = new Map<string, number>();
+  const khalaByMonth = new Map<string, KhalaMonthStanding>();
   if (compare(periodStart, periodEnd) <= 0) {
     const firstMonth = monthOf(periodStart);
     const lastMonth = monthOf(periodEnd);
@@ -1456,6 +1567,7 @@ export function computeRunningBalances(input: {
         guestMeals,
         extras,
         bills,
+        khalaPayments,
         rateCards,
         ramadanMode,
         soloElectricityMultiplier,
@@ -1476,6 +1588,14 @@ export function computeRunningBalances(input: {
           (extraCostByMember.get(memberId) ?? 0) + cost.extraAmount,
         );
       }
+      khalaByMonth.set(monthCursor, {
+        month: monthCursor,
+        paid: computation.khala.totalPaid,
+        target: computation.khala.monthlyTarget,
+        outstanding: computation.khala.outstanding,
+        fullyPaid: computation.khala.fullyPaid,
+        count: computation.khala.memberCount,
+      });
       monthCursor = nextMonthKey(monthCursor);
       if (++guard > 120) break;
     }
@@ -1530,7 +1650,16 @@ export function computeRunningBalances(input: {
     totalCredit: sum(rows.filter((r) => r.balance >= 0).map((r) => r.balance)),
   };
 
-  return { periodStart, periodEnd, rows, summary };
+  return { periodStart, periodEnd, rows, summary, khalaByMonth };
+}
+
+export interface KhalaMonthStanding {
+  month: MonthKey;
+  paid: number;
+  target: number;
+  outstanding: number;
+  fullyPaid: boolean;
+  count: number;
 }
 
 /** The smallest date key in a list, or null when the list is empty. */

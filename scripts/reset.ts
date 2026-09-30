@@ -17,6 +17,7 @@ const TABLES = [
   "month_closes",
   "deposits",
   "utility_bills",
+  "khala_payments",
   "extra_line_items",
   "daily_bazar_records",
   "bazar_duty_rooms",

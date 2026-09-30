@@ -61,6 +61,8 @@ export interface ActivitySources {
   deposits: { date: DateKey }[];
   extras: { date: DateKey; voided: boolean }[];
   bills: { month: MonthKey }[];
+  /** Dated khala instalments, so a month with only khala is still closeable. */
+  khalaPayments?: { date: DateKey }[];
   /** Days whose bazar was confirmed, even if they produced no extra rows. */
   bazarDates?: DateKey[];
 }
@@ -78,6 +80,7 @@ export function monthsWithActivity(input: ActivitySources): Set<MonthKey> {
     if (!extra.voided) months.add(monthOf(extra.date));
   }
   for (const bill of input.bills) months.add(bill.month);
+  for (const payment of input.khalaPayments ?? []) months.add(monthOf(payment.date));
   for (const date of input.bazarDates ?? []) months.add(monthOf(date));
   return months;
 }

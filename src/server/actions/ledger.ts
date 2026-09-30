@@ -5,7 +5,13 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 
 import { db } from "@/db";
-import { deposits, extraLineItems, utilityBills } from "@/db/schema";
+import {
+  deposits,
+  extraLineItems,
+  khalaPayments,
+  utilityBills,
+} from "@/db/schema";
+import { apportionKhala, rateCardFor } from "@/lib/calc";
 import {
   fail,
   firstIssue,
@@ -17,14 +23,20 @@ import {
   formatMonthLongDisplay,
   isValidDateKey,
   isValidMonthKey,
+  monthEnd,
   monthOf,
   monthStart,
 } from "@/lib/dates";
-import { formatTaka } from "@/lib/money";
+import { formatTaka, sum } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { recordAudit } from "@/server/audit";
 import { monthKeyLockError, monthLockError } from "@/server/month-lock";
-import { countActiveMembersInMonth, getMemberNames } from "@/server/queries";
+import {
+  countActiveMembersInMonth,
+  getKhalaPayments,
+  getMemberNames,
+  loadLedgerSnapshot,
+} from "@/server/queries";
 
 const extraSchema = z.object({
   date: z.string().refine(isValidDateKey, "Pick a valid date"),
@@ -289,9 +301,154 @@ export async function saveUtilityBill(
   return ok("Bill saved");
 }
 
+const khalaPaymentSchema = z.object({
+  date: z.string().refine(isValidDateKey, "Pick a valid date"),
+  amount: takaAmount(1),
+  notes: z.string().trim().max(300).optional(),
+  /** Generated once per submission so a double-click cannot log it twice. */
+  idempotencyKey: z.string().max(64).optional(),
+});
+
+/**
+ * The most khala that may be logged for a month: the rate card's per-head
+ * amounts summed over everyone who lived in the mess that month.
+ */
+async function khalaCeilingForMonth(month: string): Promise<number> {
+  const snapshot = await loadLedgerSnapshot();
+  const apportion = apportionKhala({
+    members: snapshot.members,
+    rooms: snapshot.rooms,
+    payments: [],
+    from: monthStart(month),
+    to: monthEnd(month),
+    rateCard: rateCardFor(snapshot.rateCards, monthStart(month)),
+    today: snapshot.today,
+  });
+  return apportion.monthlyTarget;
+}
+
+export async function logKhalaPayment(
+  input: z.input<typeof khalaPaymentSchema>,
+): Promise<ActionResult> {
+  const actor = await requireSession();
+  const parsed = khalaPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    return fail(firstIssue(parsed.error, "Invalid khala payment"));
+  }
+
+  const locked = await monthLockError([parsed.data.date]);
+  if (locked) return fail(locked);
+
+  const month = monthOf(parsed.data.date);
+  const alreadyPaid = sum(
+    (
+      await getKhalaPayments()
+    ).filter((payment) => monthOf(payment.date) === month).map((p) => p.amount),
+  );
+  const ceiling = await khalaCeilingForMonth(month);
+
+  if (alreadyPaid + parsed.data.amount > ceiling) {
+    const remaining = Math.max(0, ceiling - alreadyPaid);
+    return fail(
+      ceiling === 0
+        ? `The rate card sets no khala for ${formatMonthLongDisplay(
+            month,
+          )}, so there is nothing to log against. Set the khala rates on the Rate Card page first.`
+        : `That would take khala for ${formatMonthLongDisplay(
+            month,
+          )} to ${formatTaka(
+            alreadyPaid + parsed.data.amount,
+          )}, above the ${formatTaka(
+            ceiling,
+          )} the rate card says a full month costs. ${formatTaka(
+            remaining,
+          )} is still outstanding — log that instead.`,
+    );
+  }
+
+  const { idempotencyKey, notes, ...values } = parsed.data;
+  try {
+    await db.transaction(async (tx) => {
+      await tx.insert(khalaPayments).values({
+        ...values,
+        notes: notes || null,
+        idempotencyKey: idempotencyKey ?? null,
+      });
+
+      await recordAudit(
+        {
+          actor,
+          action: "bill.save",
+          entityType: "khala_payment",
+          entityId: values.date,
+          summary: `Logged a khala payment of ${formatTaka(
+            values.amount,
+          )} on ${values.date}`,
+          detail: {
+            date: values.date,
+            amount: values.amount,
+            monthPaidTotal: alreadyPaid + values.amount,
+            monthTarget: ceiling,
+          },
+        },
+        tx,
+      );
+    });
+  } catch (error) {
+    return fail(firstIssue(error, "Could not log the khala payment"));
+  }
+  refresh();
+  return ok("Khala payment logged");
+}
+
+export async function deleteKhalaPayment(input: {
+  id: string;
+}): Promise<ActionResult> {
+  const actor = await requireSession();
+  const existing = (
+    await db
+      .select({
+        id: khalaPayments.id,
+        date: khalaPayments.date,
+        amount: khalaPayments.amount,
+      })
+      .from(khalaPayments)
+      .where(eq(khalaPayments.id, input.id))
+      .limit(1)
+  )[0];
+  if (!existing) return fail("That khala payment no longer exists");
+
+  const locked = await monthLockError([existing.date]);
+  if (locked) return fail(locked);
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(khalaPayments).where(eq(khalaPayments.id, input.id));
+
+      await recordAudit(
+        {
+          actor,
+          action: "bill.delete",
+          entityType: "khala_payment",
+          entityId: existing.id,
+          summary: `Removed a khala payment of ${formatTaka(
+            existing.amount,
+          )} dated ${existing.date}`,
+          detail: { date: existing.date, amount: existing.amount },
+        },
+        tx,
+      );
+    });
+  } catch (error) {
+    return fail(firstIssue(error, "Could not delete the khala payment"));
+  }
+  refresh();
+  return ok("Khala payment removed");
+}
+
 export async function deleteUtilityBill(input: {
   month: string;
-  type: "ELECTRICITY" | "WIFI" | "KHALA";
+  type: "ELECTRICITY" | "WIFI";
 }): Promise<ActionResult> {
   const actor = await requireSession();
   if (!isValidMonthKey(input.month)) return fail("Invalid month");
