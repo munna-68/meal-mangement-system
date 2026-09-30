@@ -332,6 +332,7 @@ export interface DayTotals {
   halfAmount: number;
   guestFullAmount: number;
   guestHalfAmount: number;
+  guestDeductionAmount: number;
   sehriAmount: number;
   mealsSubtotal: number;
   extraItems: ExtraItemData[];
@@ -414,10 +415,18 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
   const halfAmount = rateCard ? halfCount * rateCard.halfMealRate : 0;
   const guestFullAmount = rateCard ? guestFullCount * rateCard.guestFullRate : 0;
   const guestHalfAmount = rateCard ? guestHalfCount * rateCard.guestHalfRate : 0;
+  const totalGuestMeals = guestFullCount + guestHalfCount;
+  const guestDeductionAmount =
+    rateCard && totalGuestMeals > 0 ? totalGuestMeals * 5 : 0;
   const sehriAmount = rateCard && ramadanMode ? sehriCount * rateCard.sehriRate : 0;
 
   const mealsSubtotal =
-    fullAmount + halfAmount + guestFullAmount + guestHalfAmount + sehriAmount;
+    fullAmount +
+    halfAmount +
+    guestFullAmount +
+    guestHalfAmount -
+    guestDeductionAmount +
+    sehriAmount;
   const totalBudget = mealsSubtotal + extraAmount - deductionAmount;
 
   return {
@@ -434,6 +443,7 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
     halfAmount,
     guestFullAmount,
     guestHalfAmount,
+    guestDeductionAmount,
     sehriAmount,
     mealsSubtotal,
     extraItems: dailyExtras,

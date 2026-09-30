@@ -165,6 +165,20 @@ export function BazarSlip({
               </span>
             </div>
 
+            {totals.guestDeductionAmount > 0 ? (
+              <div className={`${styles.moneyRow} ${styles.deductionRow}`}>
+                <span className={styles.moneyLabel}>
+                  5 taka deducted per guest meal
+                </span>
+                <span className={styles.moneyFormula}>
+                  {bn(totals.guestFullCount + totals.guestHalfCount)} × {bn(5)} =
+                </span>
+                <span className={styles.moneyAmount}>
+                  −{formatTakaBengali(totals.guestDeductionAmount)}
+                </span>
+              </div>
+            ) : null}
+
             {showSehri ? (
               <div className={styles.moneyRow}>
                 <span className={styles.moneyLabel}>সেহরি</span>

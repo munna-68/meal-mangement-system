@@ -90,8 +90,8 @@ const RATE_CARD: RateCardData = {
   effectiveTo: null,
   fullMealRate: 60,
   halfMealRate: 35,
-  guestFullRate: 80,
-  guestHalfRate: 45,
+  guestFullRate: 75,
+  guestHalfRate: 40,
   sehriRate: 70,
   feastFlatCharge: 200,
   khalaNormalRate: 300,
@@ -278,15 +278,38 @@ section("Daily budget");
   check("full amount 1x60", totals.fullAmount, 60);
   check("half amount 2x35", totals.halfAmount, 70);
   check("guest full count", totals.guestFullCount, 2);
-  check("guest full amount 2x80", totals.guestFullAmount, 160);
+  check("guest full amount 2x75", totals.guestFullAmount, 150);
   check("guest half amount", totals.guestHalfAmount, 0);
+  check("guest deduction 2x5", totals.guestDeductionAmount, 10);
   check("only budget-flagged extras count", totals.extraAmount, 330);
   check(
     "guest meal does not change host status (m4 still OFF)",
     totals.fullCount,
     1,
   );
-  check("total = 60+70+160+330-20", totals.totalBudget, 600);
+  check("total = 60+70+150-10+330-20", totals.totalBudget, 580);
+
+  const workedGuests: GuestMealData[] = [
+    { memberId: "m1", date: "2025-03-05", type: "GUEST_FULL", count: 2 },
+    { memberId: "m1", date: "2025-03-05", type: "GUEST_HALF", count: 1 },
+  ];
+  const workedTotals = computeDayTotals({
+    date: "2025-03-05",
+    members: MEMBERS,
+    changes: [],
+    guestMeals: workedGuests,
+    extras: [],
+    rateCard: RATE_CARD,
+    deductionAmount: 0,
+    today: "2025-03-31",
+  });
+  check("worked guest full count", workedTotals.guestFullCount, 2);
+  check("worked guest half count", workedTotals.guestHalfCount, 1);
+  check("worked guest full amount (2x75)", workedTotals.guestFullAmount, 150);
+  check("worked guest half amount (1x40)", workedTotals.guestHalfAmount, 40);
+  check("worked guest deduction ((2+1)x5)", workedTotals.guestDeductionAmount, 15);
+  check("worked meals subtotal (150+40-15)", workedTotals.mealsSubtotal, 175);
+  check("worked total budget", workedTotals.totalBudget, 175);
 
   const voidedExtras = extras.map((e) =>
     e.id === "e1" ? { ...e, voided: true } : e,

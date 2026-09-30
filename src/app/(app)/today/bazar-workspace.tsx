@@ -270,6 +270,14 @@ export function BazarWorkspace({
             detail={`${totals.guestHalfCount} × ${totals.rateCard?.guestHalfRate ?? 0}`}
             amount={totals.guestHalfAmount}
           />
+          {totals.guestDeductionAmount > 0 ? (
+            <Line
+              label="5 taka deducted per guest meal"
+              detail={`${totals.guestFullCount + totals.guestHalfCount} × 5`}
+              amount={-totals.guestDeductionAmount}
+              negative
+            />
+          ) : null}
           {ramadanMode && totals.sehriCount > 0 ? (
             <Line
               label="Sehri"
