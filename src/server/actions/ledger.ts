@@ -170,7 +170,7 @@ export async function deleteExtra(id: string): Promise<ActionResult> {
 
 const billSchema = z.object({
   month: z.string().refine(isValidMonthKey, "Pick a month"),
-  type: z.enum(["ELECTRICITY", "WIFI"]),
+  type: z.enum(["ELECTRICITY", "WIFI", "KHALA"]),
   amount: z.coerce.number().int().min(0, "Amount cannot be negative"),
 });
 
@@ -218,7 +218,7 @@ export async function saveUtilityBill(
 
 export async function deleteUtilityBill(input: {
   month: string;
-  type: "ELECTRICITY" | "WIFI";
+  type: "ELECTRICITY" | "WIFI" | "KHALA";
 }): Promise<ActionResult> {
   const actor = await requireSession();
   if (!isValidMonthKey(input.month)) return fail("Invalid month");

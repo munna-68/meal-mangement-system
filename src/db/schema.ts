@@ -40,6 +40,7 @@ export const extraCategoryEnum = pgEnum("extra_category", [
 export const utilityTypeEnum = pgEnum("utility_type", [
   "ELECTRICITY",
   "WIFI",
+  "KHALA",
 ]);
 
 /**

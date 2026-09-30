@@ -195,22 +195,22 @@ export function BazarSlip({
 
             <div className={styles.moneyDivider} />
 
-            {totals.extraItems.length > 0 ? (
-              totals.extraItems.map((item) => (
-                <div className={styles.moneyRow} key={item.id}>
-                  <span className={styles.moneyLabel}>
-                    {item.category === "RECURRING_DAILY"
-                      ? "দৈনিক অতিরিক্ত"
-                      : item.category === "MANAGER_FEE"
-                        ? "ম্যানেজারের দৈনিক ফি"
+            {totals.extraItems.filter((i) => i.category !== "MANAGER_FEE").length > 0 ? (
+              totals.extraItems
+                .filter((i) => i.category !== "MANAGER_FEE")
+                .map((item) => (
+                  <div className={styles.moneyRow} key={item.id}>
+                    <span className={styles.moneyLabel}>
+                      {item.category === "RECURRING_DAILY"
+                        ? "দৈনিক অতিরিক্ত"
                         : item.label}
-                  </span>
-                  <span className={styles.moneyFormula} />
-                  <span className={styles.moneyAmount}>
-                    +{formatTakaBengali(item.amount)}
-                  </span>
-                </div>
-              ))
+                    </span>
+                    <span className={styles.moneyFormula} />
+                    <span className={styles.moneyAmount}>
+                      +{formatTakaBengali(item.amount)}
+                    </span>
+                  </div>
+                ))
             ) : (
               <div className={styles.moneyRow}>
                 <span className={styles.moneyLabel}>অতিরিক্ত</span>
@@ -220,6 +220,16 @@ export function BazarSlip({
                 </span>
               </div>
             )}
+
+            {totals.managerFeeAmount > 0 ? (
+              <div className={`${styles.moneyRow} ${styles.deductionRow}`}>
+                <span className={styles.moneyLabel}>ম্যানেজার ফি কর্তন</span>
+                <span className={styles.moneyFormula} />
+                <span className={styles.moneyAmount}>
+                  −{formatTakaBengali(totals.managerFeeAmount)}
+                </span>
+              </div>
+            ) : null}
 
             {totals.deductionAmount > 0 ? (
               <div className={`${styles.moneyRow} ${styles.deductionRow}`}>

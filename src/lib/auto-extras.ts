@@ -19,7 +19,7 @@ export function managerFeeSourceKey(date: DateKey): string {
 
 /** An auto-generated line item, in the shape the calculation engine expects. */
 export interface AutoExtraRow extends ExtraItemData {
-  category: "RECURRING_DAILY" | "MANAGER_FEE";
+  category: "RECURRING_DAILY";
   isAuto: true;
   sourceKey: string;
 }
@@ -28,10 +28,8 @@ export interface AutoExtraRow extends ExtraItemData {
  * The recurring rows a confirmed day should carry, priced from the rate card in
  * force on that day.
  *
- * NOTE (deliberate, do not "fix"): the manager's fee is a *separate* line item
- * added on top of the recurring daily Extra, not carved out of it. The mess
- * owner confirmed the two amounts are meant to be additive, so a day carries
- * both `dailyExtraAmount` and `managerDailyFee`.
+ * NOTE: The manager's daily fee is NOT an extra line item and does not enter
+ * any cost pool. It is deducted from the daily bazar cash instead.
  */
 export function autoExtraRowsFor(
   day: DateKey,
@@ -52,20 +50,6 @@ export function autoExtraRowsFor(
       voided: false,
       isAuto: true,
       sourceKey: dailyExtraSourceKey(day),
-    });
-  }
-
-  if (card.managerDailyFee > 0) {
-    rows.push({
-      id: managerFeeSourceKey(day),
-      date: day,
-      label: "Manager's daily fee",
-      amount: card.managerDailyFee,
-      category: "MANAGER_FEE",
-      showInDailyBudget: true,
-      voided: false,
-      isAuto: true,
-      sourceKey: managerFeeSourceKey(day),
     });
   }
 

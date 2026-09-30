@@ -4,12 +4,15 @@ import { PageHeader, Stat } from "@/components/page-header";
 import {
   computeMonthlyFixedExtraSummary,
   isMemberActiveInRange,
+  khalaAmountFor,
+  occupancyForRange,
   rateCardFor,
   type MonthlyFixedExtraSummary,
 } from "@/lib/calc";
 import {
   addMonths,
   currentMonthKey,
+  daysInMonth,
   isSameOrAfter,
   isSameOrBefore,
   monthEnd,
@@ -17,7 +20,7 @@ import {
   monthStart,
   todayKey,
 } from "@/lib/dates";
-import { formatTaka } from "@/lib/money";
+import { formatTaka, roundTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { ensureAutoExtrasForMonth } from "@/server/auto-extras";
 import {
@@ -25,9 +28,15 @@ import {
   getExtras,
   getMembersWithRooms,
   getRateCards,
+  getRooms,
   getUtilityBills,
 } from "@/server/queries";
-import { ExtrasClient, type BillRecord, type ExtraRecord } from "./extras-client";
+import {
+  ExtrasClient,
+  type BillRecord,
+  type ExtraRecord,
+  type MonthCostPoolSummary,
+} from "./extras-client";
 
 export const metadata: Metadata = { title: "Extras & Bills" };
 
@@ -40,41 +49,121 @@ export default async function ExtrasPage() {
   // Ensure the current month's auto extras are materialized for any confirmed bazar days.
   await ensureAutoExtrasForMonth(now);
 
-  const [extras, bills, members, rateCards, allConfirmed] = await Promise.all([
-    getExtras(),
-    getUtilityBills(),
-    getMembersWithRooms(),
-    getRateCards(),
-    getAllConfirmedBazarDates(),
-  ]);
+  const [extras, bills, members, rooms, rateCards, allConfirmed] =
+    await Promise.all([
+      getExtras(),
+      getUtilityBills(),
+      getMembersWithRooms(),
+      getRooms(),
+      getRateCards(),
+      getAllConfirmedBazarDates(),
+    ]);
 
   const confirmedSet = new Set(allConfirmed);
   const today = todayKey();
 
-  const extraRecords: ExtraRecord[] = extras.slice(0, RECENT_LIMIT).map((item) => ({
-    id: item.id,
-    date: item.date,
-    label: item.label,
-    amount: item.amount,
-    category: item.category,
-    showInDailyBudget: item.showInDailyBudget,
-    voided: item.voided,
-    isAuto: item.isAuto,
-  }));
+  // Safely exclude legacy/auto-created manager fee rows
+  const safeExtras = extras.filter(
+    (item) =>
+      item.category !== "MANAGER_FEE" &&
+      !item.sourceKey?.startsWith("auto:manager-fee:"),
+  );
+
+  const extraRecords: ExtraRecord[] = safeExtras
+    .slice(0, RECENT_LIMIT)
+    .map((item) => ({
+      id: item.id,
+      date: item.date,
+      label: item.label,
+      amount: item.amount,
+      category: item.category,
+      showInDailyBudget: item.showInDailyBudget,
+      voided: item.voided,
+      isAuto: item.isAuto,
+    }));
 
   const months = Array.from({ length: 12 }, (_, index) => addMonths(now, -index));
 
-  const billRecords: BillRecord[] = months
-    .map((month) => ({
+  const billRecords: BillRecord[] = months.map((month) => {
+    const from = monthStart(month);
+    const to = monthEnd(month);
+    const card = rateCardFor(rateCards, from);
+    const monthMembers = members.filter((m) =>
+      isMemberActiveInRange(m, from, to, today),
+    );
+    const occupancy = occupancyForRange({ members, rooms, from, to, today });
+    const calculatedKhala = monthMembers.reduce(
+      (sum, m) => sum + khalaAmountFor({ member: m, occupancy, rateCard: card }),
+      0,
+    );
+
+    const elecBill = bills.find(
+      (bill) => bill.month === month && bill.type === "ELECTRICITY",
+    );
+    const wifiBill = bills.find(
+      (bill) => bill.month === month && bill.type === "WIFI",
+    );
+    const khalaBill = bills.find(
+      (bill) => bill.month === month && bill.type === "KHALA",
+    );
+
+    const hasSavedKhala = khalaBill !== undefined && khalaBill.amount > 0;
+    const khala = hasSavedKhala
+      ? khalaBill.amount
+      : calculatedKhala > 0
+        ? calculatedKhala
+        : null;
+
+    return {
       month,
-      electricity:
-        bills.find((bill) => bill.month === month && bill.type === "ELECTRICITY")
-          ?.amount ?? null,
-      wifi:
-        bills.find((bill) => bill.month === month && bill.type === "WIFI")?.amount ??
-        null,
-    }))
-    .filter((bill) => bill.electricity !== null || bill.wifi !== null);
+      electricity: elecBill?.amount ?? null,
+      wifi: wifiBill?.amount ?? null,
+      khala,
+      calculatedKhala,
+      hasSavedKhala,
+    };
+  });
+
+  const poolSummaries: MonthCostPoolSummary[] = months.map((month) => {
+    const from = monthStart(month);
+    const to = monthEnd(month);
+    const confirmedCount = Array.from(confirmedSet).filter(
+      (d) => isSameOrAfter(d, from) && isSameOrBefore(d, to),
+    ).length;
+    const activeMembers = members.filter((m) =>
+      isMemberActiveInRange(m, from, to, today),
+    );
+    const boarderCount = activeMembers.length;
+    const card = rateCardFor(rateCards, from);
+    const dailyRate = card?.dailyExtraAmount ?? 0;
+
+    // Extras pool = confirmed recurring daily extra + all manual one-offs
+    const monthExtras = safeExtras.filter(
+      (item) => monthOf(item.date) === month && !item.voided,
+    );
+    const extrasPoolTotal = monthExtras.reduce((sum, item) => sum + item.amount, 0);
+    const extrasPerHead =
+      boarderCount > 0 ? roundTaka(extrasPoolTotal / boarderCount) : 0;
+
+    // Utility pool = electricity + wifi + khala bill
+    const bill = billRecords.find((b) => b.month === month);
+    const utilityPoolTotal =
+      (bill?.electricity ?? 0) + (bill?.wifi ?? 0) + (bill?.khala ?? 0);
+    const utilityPerHead =
+      boarderCount > 0 ? roundTaka(utilityPoolTotal / boarderCount) : 0;
+
+    return {
+      month,
+      extrasPoolTotal,
+      extrasPerHead,
+      utilityPoolTotal,
+      utilityPerHead,
+      boarderCount,
+      mealDaysRan: confirmedCount,
+      dailyRate,
+      totalDaysInMonth: daysInMonth(month).length,
+    };
+  });
 
   const fixedSummaries: MonthlyFixedExtraSummary[] = months.map((month) => {
     const from = monthStart(month);
@@ -94,13 +183,9 @@ export default async function ExtrasPage() {
     });
   });
 
-  const currentSummary = fixedSummaries[0];
+  const currentPool = poolSummaries[0];
 
-  const monthExtras = extras.filter(
-    (item) => monthOf(item.date) === now && !item.voided,
-  );
-  const monthPool = monthExtras.reduce((total, item) => total + item.amount, 0);
-  const todayBudget = extras
+  const todayBudget = safeExtras
     .filter((item) => item.date === today && item.showInDailyBudget && !item.voided)
     .reduce((total, item) => total + item.amount, 0);
 
@@ -108,30 +193,35 @@ export default async function ExtrasPage() {
     <>
       <PageHeader
         title="Extras & Utility Bills"
-        description="The shared cost pool: fixed daily recurring extra, one-off charges, feast surcharges and monthly bills."
+        description="The shared cost pools: Extras pool (daily recurring extra + manual charges) and Utility pool (electricity, wifi, and khala bills)."
       />
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat
-          label="This month's pool"
-          value={formatTaka(monthPool)}
-          hint="split evenly at month end"
+          label="Extras pool"
+          value={formatTaka(currentPool.extrasPoolTotal)}
+          hint={`${formatTaka(currentPool.extrasPerHead)} / head (${currentPool.boarderCount} boarders)`}
         />
-        <Stat label="In today's budget" value={formatTaka(todayBudget)} />
         <Stat
-          label="Daily extra per head"
-          value={formatTaka(currentSummary?.perBoarderCost ?? 0)}
-          hint={`${currentSummary?.mealDaysRan ?? 0} days × ${formatTaka(currentSummary?.dailyRate ?? 300)}`}
+          label="Utility pool"
+          value={formatTaka(currentPool.utilityPoolTotal)}
+          hint={`${formatTaka(currentPool.utilityPerHead)} / head (elec + wifi + khala)`}
         />
         <Stat
           label="Active boarders"
-          value={currentSummary?.boarderCount ?? members.length}
-          hint="for extra pool split"
+          value={currentPool.boarderCount}
+          hint="for cost pool splits"
+        />
+        <Stat
+          label="In today's budget"
+          value={formatTaka(todayBudget)}
+          hint="daily extras in today's bazar"
         />
       </div>
       <ExtrasClient
         extras={extraRecords}
         bills={billRecords}
         months={months}
+        poolSummaries={poolSummaries}
         fixedSummaries={fixedSummaries}
       />
     </>

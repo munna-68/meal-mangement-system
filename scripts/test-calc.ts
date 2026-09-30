@@ -281,13 +281,14 @@ section("Daily budget");
   check("guest full amount 2x75", totals.guestFullAmount, 150);
   check("guest half amount", totals.guestHalfAmount, 0);
   check("guest deduction 2x5", totals.guestDeductionAmount, 10);
-  check("only budget-flagged extras count", totals.extraAmount, 330);
+  check("only budget-flagged extras count (excluding manager fee)", totals.extraAmount, 300);
+  check("manager fee held back from bazar cash", totals.managerFeeAmount, 30);
   check(
     "guest meal does not change host status (m4 still OFF)",
     totals.fullCount,
     1,
   );
-  check("total = 60+70+150-10+330-20", totals.totalBudget, 580);
+  check("total = meals(270) + extra(300) - managerFee(30) - deduction(20)", totals.totalBudget, 520);
 
   const workedGuests: GuestMealData[] = [
     { memberId: "m1", date: "2025-03-05", type: "GUEST_FULL", count: 2 },
@@ -309,13 +310,13 @@ section("Daily budget");
   check("worked guest half amount (1x40)", workedTotals.guestHalfAmount, 40);
   check("worked guest deduction ((2+1)x5)", workedTotals.guestDeductionAmount, 15);
   check("worked meals subtotal (150+40-15)", workedTotals.mealsSubtotal, 175);
-  check("worked total budget", workedTotals.totalBudget, 175);
+  check("worked total budget (meals 175 - managerFee 30)", workedTotals.totalBudget, 145);
 
   const voidedExtras = extras.map((e) =>
     e.id === "e1" ? { ...e, voided: true } : e,
   );
   check(
-    "voided extra is excluded",
+    "voided extra is excluded and manager fee is excluded from extras",
     computeDayTotals({
       date: "2025-03-05",
       members: MEMBERS,
@@ -325,7 +326,7 @@ section("Daily budget");
       rateCard: RATE_CARD,
       today: "2025-03-31",
     }).extraAmount,
-    30,
+    0,
   );
 
   check(
@@ -525,16 +526,16 @@ section("Extra pool");
   check("fixed extra summary boarder count is 30", fixedSummary.boarderCount, 30);
   check("fixed extra summary cost per head is 8400 / 30 = 280", fixedSummary.perBoarderCost, 280);
 
-  // With manager fee included (e.g. ৳30/day)
+  // Manager fee is excluded from per-boarder cost
   const withManagerFee = computeMonthlyFixedExtraSummary({
     month: "2026-09",
     confirmedBazarDaysCount: 28,
     rateCard: { ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 },
     activeMemberCount: 30,
   });
-  check("fixed extra summary includes manager fee total 28 * 30 = 840", withManagerFee.totalManagerFee, 840);
-  check("fixed extra summary per boarder manager fee is 28", withManagerFee.perBoarderManagerFee, 28);
-  check("fixed extra summary combined per boarder is 280 + 28 = 308", withManagerFee.combinedPerBoarder, 308);
+  check("fixed extra summary manager fee total is 0 (not charged to boarders)", withManagerFee.totalManagerFee, 0);
+  check("fixed extra summary per boarder manager fee is 0", withManagerFee.perBoarderManagerFee, 0);
+  check("fixed extra summary combined per boarder is only daily extra = 280", withManagerFee.combinedPerBoarder, 280);
 
   // Edge cases: 0 boarders and 0 meal days
   const zeroBoarders = computeMonthlyFixedExtraSummary({
@@ -1121,12 +1122,11 @@ section("Flat monthly charges accrue day by day");
 section("Confirm-then-materialise ordering");
 {
   const planned = autoExtraRowsFor("2025-03-05", RATE_CARD);
-  check("a confirmed day carries both recurring rows", planned.map((row) => row.category), [
+  check("a confirmed day carries recurring extra row", planned.map((row) => row.category), [
     "RECURRING_DAILY",
-    "MANAGER_FEE",
   ]);
-  check("the manager fee is added on top of the daily Extra", planned.map((row) => row.amount), [300, 30]);
-  check("both rows are flagged for the daily budget", planned.every((row) => row.showInDailyBudget), true);
+  check("recurring daily amount is 300", planned.map((row) => row.amount), [300]);
+  check("recurring row is flagged for the daily budget", planned.every((row) => row.showInDailyBudget), true);
 
   const dayBefore = computeDayTotals({
     date: "2025-03-05",
@@ -1147,16 +1147,16 @@ section("Confirm-then-materialise ordering");
     today: "2025-03-31",
   });
   check("without the recurring rows the day is understated", dayBefore.extraAmount, 0);
-  check("merging the planned rows gives the slip's figure", dayAfter.extraAmount, 330);
+  check("merging the planned rows gives the slip's figure", dayAfter.extraAmount, 300);
   check(
     "the stored budget gains exactly the recurring costs",
     dayAfter.totalBudget - dayBefore.totalBudget,
-    330,
+    300,
   );
 
   // Idempotency: a day saved twice must not double-count, and a row that was
   // deliberately turned off must not come back.
-  check("both rows are pending on a fresh day", pendingAutoExtraRows("2025-03-05", RATE_CARD, []).length, 2);
+  check("recurring row is pending on a fresh day", pendingAutoExtraRows("2025-03-05", RATE_CARD, []).length, 1);
   check(
     "an already-recorded row is not added again",
     pendingAutoExtraRows(
@@ -1167,11 +1167,11 @@ section("Confirm-then-materialise ordering");
     0,
   );
   check(
-    "a voided row is not resurrected",
+    "a recorded/voided row is not resurrected",
     pendingAutoExtraRows("2025-03-05", RATE_CARD, [planned[0].sourceKey]).map(
       (row) => row.category,
     ),
-    ["MANAGER_FEE"],
+    [],
   );
   check("a missing rate card plans nothing", autoExtraRowsFor("2025-03-05", null), []);
   check(
@@ -1860,6 +1860,140 @@ section("Special rooms");
     ROOM_TYPES.map(roomTypeValue),
     ["1", "2", "3", "2-solo", "3-solo"],
   );
+}
+
+// ---------------------------------------------------------------------------
+// Two separate cost pools, khala bill, and manager fee deduction
+// ---------------------------------------------------------------------------
+
+section("Two separate cost pools, khala bill, and manager fee deduction");
+{
+  const twelveMembers: MemberData[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `m${i + 1}`,
+    name: `Boarder ${i + 1}`,
+    roomId: `r${(i % 4) + 1}`,
+    active: true,
+    joinDate: "2026-09-01",
+    leaveDate: null,
+  }));
+  const fourRooms: RoomData[] = Array.from({ length: 4 }, (_, i) => ({
+    id: `r${i + 1}`,
+    number: `10${i + 1}`,
+    capacity: 3,
+    floor: 1,
+    baseRent: 3000,
+  }));
+
+  // Extras pool: 300 recurring + 6000 one-off + legacy manager fee row (must be excluded)
+  const extrasList: ExtraItemData[] = [
+    {
+      id: "ex-rec",
+      date: "2026-09-01",
+      label: "Daily Extra",
+      amount: 300,
+      category: "RECURRING_DAILY",
+      showInDailyBudget: true,
+      voided: false,
+    },
+    {
+      id: "ex-fridge",
+      date: "2026-09-05",
+      label: "Fridge repair",
+      amount: 6000,
+      category: "ONE_OFF",
+      showInDailyBudget: false,
+      voided: false,
+    },
+    {
+      id: "ex-legacy-mgr",
+      date: "2026-09-01",
+      label: "Manager fee legacy",
+      amount: 30,
+      category: "MANAGER_FEE",
+      showInDailyBudget: true,
+      voided: false,
+    },
+  ];
+
+  const pool = extraPoolForRange({
+    extras: extrasList,
+    from: "2026-09-01",
+    to: "2026-09-30",
+    activeMemberCount: 12,
+  });
+
+  check("extras pool excludes manager fee", pool.total, 6300);
+  check("extras pool per head is 6300 / 12 = 525", pool.perMember, 525);
+
+  // Utility pool: electricity 2400, wifi 1200, khala 3600
+  const utilityBills: UtilityBillData[] = [
+    { month: "2026-09", type: "ELECTRICITY", amount: 2400 },
+    { month: "2026-09", type: "WIFI", amount: 1200 },
+    { month: "2026-09", type: "KHALA", amount: 3600 },
+  ];
+
+  const monthCalc = computeMonth({
+    month: "2026-09",
+    cutoff: "2026-09-30",
+    finalize: true,
+    members: twelveMembers,
+    rooms: fourRooms,
+    changes: [],
+    guestMeals: [],
+    extras: extrasList,
+    bills: utilityBills,
+    rateCards: [{ ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 }],
+    today: "2026-09-30",
+  });
+
+  check("month extra pool per member is 525", monthCalc.extraPool.perMember, 525);
+  check("month electricity total is 2400", monthCalc.totals.electricityAmount, 2400);
+  check("month wifi total is 1200", monthCalc.totals.wifiAmount, 1200);
+  check("month khala bill total is 3600", monthCalc.totals.khalaAmount, 3600);
+  check(
+    "each member utility share is (2400+1200+3600)/12 = 600",
+    monthCalc.perMember.get("m1")?.khalaElecWifiAmount,
+    600,
+  );
+  check(
+    "each member extra share is 525",
+    monthCalc.perMember.get("m1")?.extraAmount,
+    525,
+  );
+
+  // Manager fee deduction on bazar budget:
+  // With meal total 1000 and manager fee 30: cash given out = 1000 - 30 = 970
+  const dayBudget = computeDayTotals({
+    date: "2026-09-01",
+    members: twelveMembers,
+    changes: [],
+    guestMeals: [],
+    extras: [{ id: "rec1", date: "2026-09-01", label: "Extra", amount: 300, category: "RECURRING_DAILY", showInDailyBudget: true, voided: false }],
+    rateCard: { ...RATE_CARD, managerDailyFee: 30 },
+    today: "2026-09-01",
+  });
+  check("manager fee is held back from bazar cash", dayBudget.managerFeeAmount, 30);
+
+  // Running balance separates utilityCost and extraCost
+  const running = computeRunningBalances({
+    members: twelveMembers,
+    rooms: fourRooms,
+    changes: [],
+    guestMeals: [],
+    extras: extrasList,
+    bills: utilityBills,
+    rateCards: [{ ...RATE_CARD, dailyExtraAmount: 300, managerDailyFee: 30 }],
+    deposits: [],
+    settlements: [],
+    openingBalances: [],
+    lastClosedMonth: null,
+    today: "2026-09-30",
+  });
+
+  check("running balance row has utilityCost 600", running.rows[0].utilityCost, 600);
+  check("running balance row has extraCost 525", running.rows[0].extraCost, 525);
+  check("running balance summary has utilityCost 7200", running.summary.utilityCost, 7200);
+  check("running balance summary has extraCost 6300", running.summary.extraCost, 6300);
 }
 
 // ---------------------------------------------------------------------------

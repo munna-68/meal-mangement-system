@@ -46,6 +46,8 @@ export function LedgerSheet({
 }) {
   const bn = toBengaliDigits;
   const totals = {
+    utility: rows.reduce((total, row) => total + row.khalaElecWifiAmount, 0),
+    extra: rows.reduce((total, row) => total + row.extraAmount, 0),
     cost: rows.reduce((total, row) => total + row.totalCost, 0),
     deposits: rows.reduce((total, row) => total + row.newDeposits, 0),
     available: rows.reduce((total, row) => total + row.availableBalance, 0),
@@ -80,12 +82,20 @@ export function LedgerSheet({
             <th>গেস্ট ফুল</th>
             <th>গেস্ট হাফ</th>
             <th>
-              খালা + ওয়াইফাই
+              ইউটিলিটি শেয়ার
               <br />
-              + বিদ্যুৎ
+              (খালা+ওয়াইফাই+বিদ্যুৎ)
             </th>
-            <th>এক্সট্রা</th>
-            <th>খরচ</th>
+            <th>
+              এক্সট্রা
+              <br />
+              শেয়ার
+            </th>
+            <th>
+              মোট
+              <br />
+              খরচ
+            </th>
             <th>
               {previousMonthLabel}
               <br />
@@ -136,7 +146,9 @@ export function LedgerSheet({
             </tr>
           ))}
           <tr className={styles.totalRow}>
-            <td colSpan={ramadanMode ? 9 : 8}>সর্বমোট</td>
+            <td colSpan={ramadanMode ? 7 : 6}>সর্বমোট</td>
+            <td className={styles.numeric}>{formatTakaBengali(totals.utility)}</td>
+            <td className={styles.numeric}>{formatTakaBengali(totals.extra)}</td>
             <td className={styles.numeric}>{formatTakaBengali(totals.cost)}</td>
             <td />
             <td className={styles.numeric}>{formatTakaBengali(totals.deposits)}</td>

@@ -229,7 +229,7 @@ export async function getGuestMeals(): Promise<GuestMealData[]> {
 }
 
 export async function getExtras(): Promise<ExtraRow[]> {
-  return db
+  const rows = await db
     .select({
       id: extraLineItems.id,
       date: extraLineItems.date,
@@ -244,6 +244,13 @@ export async function getExtras(): Promise<ExtraRow[]> {
     })
     .from(extraLineItems)
     .orderBy(desc(extraLineItems.date), desc(extraLineItems.createdAt));
+
+  // Safely exclude legacy/auto-created manager fee rows so they never enter any pool or charges.
+  return rows.filter(
+    (row) =>
+      row.category !== "MANAGER_FEE" &&
+      !row.sourceKey?.startsWith("auto:manager-fee:"),
+  );
 }
 
 export async function getExtrasForMonth(month: MonthKey): Promise<ExtraRow[]> {

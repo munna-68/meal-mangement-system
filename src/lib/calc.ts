@@ -31,7 +31,7 @@ export type ExtraCategory =
   | "MANAGER_FEE"
   | "FEAST"
   | "OTHER";
-export type UtilityType = "ELECTRICITY" | "WIFI";
+export type UtilityType = "ELECTRICITY" | "WIFI" | "KHALA";
 
 export interface RateCardData {
   id: string;
@@ -337,6 +337,7 @@ export interface DayTotals {
   mealsSubtotal: number;
   extraItems: ExtraItemData[];
   extraAmount: number;
+  managerFeeAmount: number;
   deductionAmount: number;
   totalBudget: number;
 }
@@ -407,7 +408,12 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
   }
 
   const dailyExtras = extras.filter(
-    (item) => item.date === date && item.showInDailyBudget && !item.voided,
+    (item) =>
+      item.date === date &&
+      item.showInDailyBudget &&
+      !item.voided &&
+      item.category !== "MANAGER_FEE" &&
+      !("sourceKey" in item && typeof (item as { sourceKey?: string }).sourceKey === "string" && (item as { sourceKey?: string }).sourceKey?.startsWith("auto:manager-fee:")),
   );
   const extraAmount = sum(dailyExtras.map((item) => item.amount));
 
@@ -427,7 +433,15 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
     guestHalfAmount -
     guestDeductionAmount +
     sehriAmount;
-  const totalBudget = mealsSubtotal + extraAmount - deductionAmount;
+
+  // The manager's daily fee is held back / deducted from the bazar cash.
+  const hasActivity =
+    fullCount + halfCount + guestFullCount + guestHalfCount + sehriCount > 0 ||
+    extraAmount > 0;
+  const managerFeeAmount =
+    rateCard && hasActivity ? (rateCard.managerDailyFee ?? 0) : 0;
+  const totalBudget =
+    mealsSubtotal + extraAmount - managerFeeAmount - deductionAmount;
 
   return {
     date,
@@ -448,6 +462,7 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
     mealsSubtotal,
     extraItems: dailyExtras,
     extraAmount,
+    managerFeeAmount,
     deductionAmount,
     totalBudget,
   };
@@ -906,6 +921,8 @@ export function extraPoolForRange(input: {
       .filter(
         (item) =>
           !item.voided &&
+          item.category !== "MANAGER_FEE" &&
+          !("sourceKey" in item && typeof (item as { sourceKey?: string }).sourceKey === "string" && (item as { sourceKey?: string }).sourceKey?.startsWith("auto:manager-fee:")) &&
           isSameOrAfter(item.date, from) &&
           isSameOrBefore(item.date, to),
       )
@@ -933,6 +950,7 @@ export interface MonthlyFixedExtraSummary {
 /**
  * Calculates the monthly fixed extra breakdown based on confirmed meal days and active boarders.
  * e.g., 28 meal days * ৳300/day = ৳8,400 ÷ 30 boarders = ৳280/boarder.
+ * Manager fee is completely excluded from the pool and per-head cost.
  */
 export function computeMonthlyFixedExtraSummary(input: {
   month: MonthKey;
@@ -944,14 +962,9 @@ export function computeMonthlyFixedExtraSummary(input: {
   const totalDaysInMonth = daysInMonth(month).length;
   const mealDaysRan = confirmedBazarDaysCount;
   const dailyRate = rateCard?.dailyExtraAmount ?? 0;
-  const managerDailyFee = rateCard?.managerDailyFee ?? 0;
   const totalDailyExtra = mealDaysRan * dailyRate;
   const perBoarderCost =
     activeMemberCount > 0 ? roundTaka(totalDailyExtra / activeMemberCount) : 0;
-  const totalManagerFee = mealDaysRan * managerDailyFee;
-  const perBoarderManagerFee =
-    activeMemberCount > 0 ? roundTaka(totalManagerFee / activeMemberCount) : 0;
-  const combinedPerBoarder = perBoarderCost + perBoarderManagerFee;
 
   return {
     month,
@@ -961,10 +974,10 @@ export function computeMonthlyFixedExtraSummary(input: {
     totalDailyExtra,
     boarderCount: activeMemberCount,
     perBoarderCost,
-    managerDailyFee,
-    totalManagerFee,
-    perBoarderManagerFee,
-    combinedPerBoarder,
+    managerDailyFee: 0,
+    totalManagerFee: 0,
+    perBoarderManagerFee: 0,
+    combinedPerBoarder: perBoarderCost,
   };
 }
 
@@ -1173,15 +1186,35 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     activeMemberCount: activeMembers.length,
   });
 
-  // Khala is a flat per-head amount for the month, not a daily charge, so it is
-  // priced once from the card in force at the start of the month — then accrued
-  // by the fraction of the month that has actually elapsed.
+  // Khala is a flat monthly charge. If an explicit monthly khala bill was saved
+  // in utility bills, apportion it using each member's room capacity weight;
+  // otherwise calculate directly from the rate card in force for that month.
+  const khalaBill = bills.find((b) => b.month === month && b.type === "KHALA");
   const monthCard = rateCardFor(rateCards, from);
   const khalaByMember = new Map<string, number>();
-  for (const member of activeMembers) {
-    const flat = khalaAmountFor({ member, occupancy, rateCard: monthCard });
-    const fraction = accrualFractionByMember.get(member.id) ?? 1;
-    khalaByMember.set(member.id, roundTaka(flat * fraction));
+
+  if (khalaBill && khalaBill.amount > 0) {
+    const weights = new Map<string, number>();
+    for (const member of activeMembers) {
+      weights.set(
+        member.id,
+        khalaAmountFor({ member, occupancy, rateCard: monthCard }),
+      );
+    }
+    const totalWeight = sum([...weights.values()]);
+    for (const member of activeMembers) {
+      const weight = weights.get(member.id) ?? 0;
+      const flat =
+        totalWeight > 0 ? (weight / totalWeight) * khalaBill.amount : 0;
+      const fraction = accrualFractionByMember.get(member.id) ?? 1;
+      khalaByMember.set(member.id, roundTaka(flat * fraction));
+    }
+  } else {
+    for (const member of activeMembers) {
+      const flat = khalaAmountFor({ member, occupancy, rateCard: monthCard });
+      const fraction = accrualFractionByMember.get(member.id) ?? 1;
+      khalaByMember.set(member.id, roundTaka(flat * fraction));
+    }
   }
 
   for (const member of activeMembers) {
@@ -1294,6 +1327,8 @@ export interface MemberRunningBalance {
   active: boolean;
   openingBalance: number;
   deposits: number;
+  utilityCost: number;
+  extraCost: number;
   cost: number;
   balance: number;
 }
@@ -1305,6 +1340,8 @@ export interface RunningBalanceResult {
   summary: {
     openingBalance: number;
     deposits: number;
+    utilityCost: number;
+    extraCost: number;
     cost: number;
     balance: number;
     membersInDeficit: number;
@@ -1396,6 +1433,8 @@ export function computeRunningBalances(input: {
   }
 
   const costByMember = new Map<string, number>();
+  const utilityCostByMember = new Map<string, number>();
+  const extraCostByMember = new Map<string, number>();
   if (compare(periodStart, periodEnd) <= 0) {
     const firstMonth = monthOf(periodStart);
     const lastMonth = monthOf(periodEnd);
@@ -1422,6 +1461,14 @@ export function computeRunningBalances(input: {
           memberId,
           (costByMember.get(memberId) ?? 0) + cost.totalCost,
         );
+        utilityCostByMember.set(
+          memberId,
+          (utilityCostByMember.get(memberId) ?? 0) + cost.khalaElecWifiAmount,
+        );
+        extraCostByMember.set(
+          memberId,
+          (extraCostByMember.get(memberId) ?? 0) + cost.extraAmount,
+        );
       }
       monthCursor = nextMonthKey(monthCursor);
       if (++guard > 120) break;
@@ -1440,6 +1487,8 @@ export function computeRunningBalances(input: {
         )
         .map((deposit) => deposit.amount),
     );
+    const utilityCost = utilityCostByMember.get(member.id) ?? 0;
+    const extraCost = extraCostByMember.get(member.id) ?? 0;
     const cost = costByMember.get(member.id) ?? 0;
     return {
       memberId: member.id,
@@ -1448,6 +1497,8 @@ export function computeRunningBalances(input: {
       active: member.active,
       openingBalance,
       deposits: memberDeposits,
+      utilityCost,
+      extraCost,
       cost,
       balance: openingBalance + memberDeposits - cost,
     };
@@ -1463,6 +1514,8 @@ export function computeRunningBalances(input: {
   const summary = {
     openingBalance: sum(rows.map((r) => r.openingBalance)),
     deposits: sum(rows.map((r) => r.deposits)),
+    utilityCost: sum(rows.map((r) => r.utilityCost)),
+    extraCost: sum(rows.map((r) => r.extraCost)),
     cost: sum(rows.map((r) => r.cost)),
     balance: sum(rows.map((r) => r.balance)),
     membersInDeficit: rows.filter((r) => r.balance < 0).length,
@@ -1518,4 +1571,5 @@ export const EXTRA_CATEGORY_LABELS: Record<ExtraCategory, string> = {
 export const UTILITY_TYPE_LABELS: Record<UtilityType, string> = {
   ELECTRICITY: "Electricity",
   WIFI: "Wifi",
+  KHALA: "Khala",
 };

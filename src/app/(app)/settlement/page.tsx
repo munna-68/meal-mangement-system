@@ -95,6 +95,8 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
 
   let rows: LedgerRowView[];
   let totals: {
+    utility: number;
+    extra: number;
     cost: number;
     deposits: number;
     available: number;
@@ -124,6 +126,8 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       closingBalance: row.closingBalance,
     }));
     totals = {
+      utility: rows.reduce((total, row) => total + row.khalaElecWifiAmount, 0),
+      extra: rows.reduce((total, row) => total + row.extraAmount, 0),
       cost: rows.reduce((total, row) => total + row.totalCost, 0),
       deposits: rows.reduce((total, row) => total + row.newDeposits, 0),
       available: rows.reduce((total, row) => total + row.availableBalance, 0),
@@ -186,6 +190,8 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
     }));
 
     totals = {
+      utility: rows.reduce((total, row) => total + row.khalaElecWifiAmount, 0),
+      extra: rows.reduce((total, row) => total + row.extraAmount, 0),
       cost: computation.totals.totalCost,
       deposits: rows.reduce((total, row) => total + row.newDeposits, 0),
       available: rows.reduce((total, row) => total + row.availableBalance, 0),
@@ -294,9 +300,9 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
                 <th className="px-3 py-2 text-right font-medium">Sehri</th>
               ) : null}
               <th className="px-3 py-2 text-right font-medium">Guest F/H</th>
-              <th className="px-3 py-2 text-right font-medium">Kha+Wifi+Elec</th>
-              <th className="px-3 py-2 text-right font-medium">Extra</th>
-              <th className="px-3 py-2 text-right font-medium">Cost</th>
+              <th className="px-3 py-2 text-right font-medium">Utility share</th>
+              <th className="px-3 py-2 text-right font-medium">Extras share</th>
+              <th className="px-3 py-2 text-right font-medium">Total cost</th>
               <th className="px-3 py-2 text-right font-medium">Opening</th>
               <th className="px-3 py-2 text-right font-medium">Deposit</th>
               <th className="px-3 py-2 text-right font-medium">Balance</th>
@@ -360,8 +366,14 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
           </tbody>
           <tfoot className="border-t-2 bg-muted/40 font-semibold">
             <tr>
-              <td className="px-3 py-2" colSpan={ramadanMode ? 8 : 7}>
+              <td className="px-3 py-2" colSpan={ramadanMode ? 6 : 5}>
                 Totals
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {formatTaka(totals.utility)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {formatTaka(totals.extra)}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
                 {formatTaka(totals.cost)}

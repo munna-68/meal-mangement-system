@@ -174,7 +174,9 @@ export default async function BalancesPage() {
                 <th className="px-3 py-2 text-left font-medium">Member</th>
                 <th className="px-3 py-2 text-right font-medium">Opening</th>
                 <th className="px-3 py-2 text-right font-medium">Deposits</th>
-                <th className="px-3 py-2 text-right font-medium">Accrued cost</th>
+                <th className="px-3 py-2 text-right font-medium">Utility share</th>
+                <th className="px-3 py-2 text-right font-medium">Extras share</th>
+                <th className="px-3 py-2 text-right font-medium">Total cost</th>
                 <th className="px-3 py-2 text-right font-medium">Balance</th>
               </tr>
             </thead>
@@ -211,6 +213,12 @@ export default async function BalancesPage() {
                       {formatTaka(row.deposits)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
+                      {formatTaka(row.utilityCost)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {formatTaka(row.extraCost)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
                       {formatTaka(row.cost)}
                     </td>
                     <td
@@ -235,6 +243,12 @@ export default async function BalancesPage() {
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatTaka(result.summary.deposits)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {formatTaka(result.summary.utilityCost)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {formatTaka(result.summary.extraCost)}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatTaka(result.summary.cost)}
@@ -288,6 +302,8 @@ export default async function BalancesPage() {
               memberName: row.memberName,
               openingBalance: row.openingBalance,
               deposits: row.deposits,
+              utilityCost: row.utilityCost,
+              extraCost: row.extraCost,
               cost: row.cost,
               balance: row.balance,
             }))}

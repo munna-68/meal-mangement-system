@@ -13,6 +13,8 @@ export interface BalanceSheetRow {
   memberName: string;
   openingBalance: number;
   deposits: number;
+  utilityCost: number;
+  extraCost: number;
   cost: number;
   balance: number;
 }
@@ -28,6 +30,8 @@ export interface BalanceSheetProps {
   summary: {
     balance: number;
     deposits: number;
+    utilityCost?: number;
+    extraCost?: number;
     cost: number;
     openingBalance: number;
     membersInDeficit: number;
@@ -55,10 +59,12 @@ export function BalanceSheet({
     (acc, row) => ({
       opening: acc.opening + row.openingBalance,
       deposits: acc.deposits + row.deposits,
+      utility: acc.utility + row.utilityCost,
+      extra: acc.extra + row.extraCost,
       cost: acc.cost + row.cost,
       balance: acc.balance + row.balance,
     }),
-    { opening: 0, deposits: 0, cost: 0, balance: 0 },
+    { opening: 0, deposits: 0, utility: 0, extra: 0, cost: 0, balance: 0 },
   );
 
   return (
@@ -124,7 +130,9 @@ export function BalanceSheet({
             <th>নাম</th>
             <th>পূর্বের</th>
             <th>জমা</th>
-            <th>খরচ</th>
+            <th>ইউটিলিটি</th>
+            <th>এক্সট্রা</th>
+            <th>মোট খরচ</th>
             <th>ব্যালেন্স</th>
             <th>অবস্থা</th>
           </tr>
@@ -141,6 +149,8 @@ export function BalanceSheet({
                 <td>{row.memberName}</td>
                 <td className={styles.num}>{formatTakaBengali(row.openingBalance)}</td>
                 <td className={styles.num}>{formatTakaBengali(row.deposits)}</td>
+                <td className={styles.num}>{formatTakaBengali(row.utilityCost)}</td>
+                <td className={styles.num}>{formatTakaBengali(row.extraCost)}</td>
                 <td className={styles.num}>{formatTakaBengali(row.cost)}</td>
                 <td className={`${styles.num} ${styles.balance}`}>
                   {formatTakaBengali(row.balance)}
@@ -155,6 +165,8 @@ export function BalanceSheet({
             <td colSpan={2}>মোট</td>
             <td className={styles.num}>{formatTakaBengali(totals.opening)}</td>
             <td className={styles.num}>{formatTakaBengali(totals.deposits)}</td>
+            <td className={styles.num}>{formatTakaBengali(totals.utility)}</td>
+            <td className={styles.num}>{formatTakaBengali(totals.extra)}</td>
             <td className={styles.num}>{formatTakaBengali(totals.cost)}</td>
             <td className={`${styles.num} ${styles.balance}`}>
               {formatTakaBengali(totals.balance)}

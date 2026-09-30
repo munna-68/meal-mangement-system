@@ -111,11 +111,8 @@ export function BazarWorkspace({
     (item) => item.date === date && item.isAuto,
   );
   const pendingDailyExtra = totals.rateCard?.dailyExtraAmount ?? 0;
-  const pendingManagerFee = totals.rateCard?.managerDailyFee ?? 0;
   const showPendingRecurring = !isConfirmed && autoRowsToday.length === 0;
-  const pendingRecurringAmount = showPendingRecurring
-    ? pendingDailyExtra + pendingManagerFee
-    : 0;
+  const pendingRecurringAmount = showPendingRecurring ? pendingDailyExtra : 0;
 
   const displayExtraAmount = extraAmount + pendingRecurringAmount;
   const displayExtraItems = showPendingRecurring
@@ -134,22 +131,22 @@ export function BazarWorkspace({
               },
             ]
           : []),
-        ...(pendingManagerFee > 0
-          ? [
-              {
-                id: `pending-manager-fee-${date}`,
-                date,
-                label: "Manager's daily fee",
-                amount: pendingManagerFee,
-                category: "MANAGER_FEE" as const,
-                showInDailyBudget: true,
-                voided: false,
-              },
-            ]
-          : []),
       ]
     : totals.extraItems;
-  const totalBudget = totals.mealsSubtotal + displayExtraAmount - deduction;
+
+  const hasActivity =
+    totals.fullCount +
+      totals.halfCount +
+      totals.guestFullCount +
+      totals.guestHalfCount +
+      totals.sehriCount >
+      0 ||
+    displayExtraAmount > 0;
+  const managerFeeDeduction =
+    hasActivity && totals.rateCard ? (totals.rateCard.managerDailyFee ?? 0) : 0;
+
+  const totalBudget =
+    totals.mealsSubtotal + displayExtraAmount - managerFeeDeduction - deduction;
   const changeReturned = advance - totalBudget;
   const isFuture = date > todayKey();
 
@@ -165,7 +162,7 @@ export function BazarWorkspace({
       return false;
     }
     if (!isConfirmed) {
-      toast.success("Bazar confirmed — daily Extra and manager fee registered");
+      toast.success("Bazar confirmed — daily Extra registered");
     }
     return true;
   }
@@ -182,8 +179,7 @@ export function BazarWorkspace({
   }
 
   function toggleRecurring(item: WorkspaceExtra, voided: boolean) {
-    const kind =
-      item.category === "MANAGER_FEE" ? "manager-fee" : "daily-extra";
+    const kind = "daily-extra";
     startTransition(async () => {
       applyExtraPatch({ id: item.id, voided });
       const result = await toggleAutoExtra({ date, kind, voided });
@@ -219,9 +215,9 @@ export function BazarWorkspace({
         <Alert className="border-emerald-300 bg-emerald-50/60">
           <CheckCircle2Icon className="text-emerald-700" />
           <AlertDescription className="text-xs">
-            This day is <strong>confirmed</strong>. The daily Extra and the
-            manager&rsquo;s fee are registered, and the day counts towards the
-            mess&rsquo;s running days for the month.
+            This day is <strong>confirmed</strong>. The daily Extra is
+            registered, and the day counts towards the mess&rsquo;s running days
+            for the month.
           </AlertDescription>
         </Alert>
       ) : (
@@ -230,9 +226,8 @@ export function BazarWorkspace({
           <AlertDescription className="text-xs">
             This day is <strong>not confirmed yet</strong>, so nothing is
             registered. Confirming adds the {formatTaka(pendingDailyExtra)}{" "}
-            daily Extra and the {formatTaka(pendingManagerFee)} manager&rsquo;s
-            fee to the month pool. Downloading or sharing the slip confirms it
-            for you.
+            daily Extra to the month pool. Downloading or sharing the slip
+            confirms it for you.
           </AlertDescription>
         </Alert>
       )}
@@ -292,6 +287,14 @@ export function BazarWorkspace({
           ) : (
             <Line label="Extra" detail="nothing flagged for today" amount={0} />
           )}
+          {managerFeeDeduction > 0 ? (
+            <Line
+              label="Manager fee"
+              detail="Held back from bazar cash"
+              amount={-managerFeeDeduction}
+              negative
+            />
+          ) : null}
           {deduction > 0 ? (
             <Line
               label="Deduction"
@@ -318,7 +321,7 @@ export function BazarWorkspace({
           </h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
             {isConfirmed
-              ? "Charged for today because the bazar is confirmed. Turn either off if nothing was cooked."
+              ? "Charged for today because the bazar is confirmed. Turn off if nothing was cooked."
               : "These are charged for each day the bazar actually runs. They register when you confirm today."}
           </p>
         </header>
@@ -338,28 +341,15 @@ export function BazarWorkspace({
                   </span>
                 </div>
               ) : null}
-              {pendingManagerFee > 0 ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">
-                      Manager&rsquo;s daily fee
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Pending — charged when you confirm today
-                    </p>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums text-muted-foreground">
-                    {formatTaka(pendingManagerFee)}
-                  </span>
-                </div>
-              ) : null}
             </>
           ) : null}
 
           {extras
             .filter((item) => item.date === date)
             .filter(
-              (item) => item.isAuto || item.category !== "RECURRING_DAILY",
+              (item) =>
+                item.category !== "MANAGER_FEE" &&
+                (item.isAuto || item.category !== "RECURRING_DAILY"),
             )
             .map((item) => (
               <div
@@ -413,10 +403,8 @@ export function BazarWorkspace({
           </div>
           {showPendingRecurring && pendingRecurringAmount > 0 ? (
             <p className="px-3 py-2 text-[11px] text-muted-foreground">
-              {formatTaka(pendingDailyExtra)} daily Extra +{" "}
-              {formatTaka(pendingManagerFee)} manager fee ={" "}
-              {formatTaka(pendingRecurringAmount)}. These join the month pool,
-              so they also count as the mess&rsquo;s running days for the month.
+              {formatTaka(pendingDailyExtra)} daily Extra joins the month pool,
+              and counts towards the mess&rsquo;s running days for the month.
             </p>
           ) : null}
         </div>

@@ -69,19 +69,28 @@ export default async function TodayPage(props: PageProps<"/today">) {
     .filter((item) => item.showInDailyBudget && !item.voided)
     .reduce((total, item) => total + item.amount, 0);
 
-  // Until the day is confirmed there are no recurring rows yet, but the shopper
-  // still needs a budget that includes them. This mirrors what the workspace
-  // shows, so the headline figure and the breakdown never disagree.
   const hasAutoRows = dayExtras.some((item) => item.isAuto);
   const pendingRecurringAmount =
     record === null && !hasAutoRows
-      ? (rateCard?.dailyExtraAmount ?? 0) + (rateCard?.managerDailyFee ?? 0)
+      ? (rateCard?.dailyExtraAmount ?? 0)
       : 0;
+
+  const hasActivity =
+    totals.fullCount +
+      totals.halfCount +
+      totals.guestFullCount +
+      totals.guestHalfCount +
+      totals.sehriCount >
+      0 ||
+    budgetExtraAmount > 0 ||
+    pendingRecurringAmount > 0;
+  const managerFeeDeduction = hasActivity ? (rateCard?.managerDailyFee ?? 0) : 0;
 
   const budgetTotal =
     totals.mealsSubtotal +
     budgetExtraAmount +
     pendingRecurringAmount -
+    managerFeeDeduction -
     (record?.deductionAmount ?? 0);
 
   return (
