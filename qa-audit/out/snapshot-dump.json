@@ -1,0 +1,1062 @@
+
+===== tables =====
+[
+ {
+  "table_name": "accounts"
+ },
+ {
+  "table_name": "audit_log"
+ },
+ {
+  "table_name": "bazar_duties"
+ },
+ {
+  "table_name": "bazar_duty_rooms"
+ },
+ {
+  "table_name": "daily_bazar_records"
+ },
+ {
+  "table_name": "deposits"
+ },
+ {
+  "table_name": "extra_line_items"
+ },
+ {
+  "table_name": "guest_meals"
+ },
+ {
+  "table_name": "login_attempts"
+ },
+ {
+  "table_name": "meal_status_changes"
+ },
+ {
+  "table_name": "members"
+ },
+ {
+  "table_name": "mess_settings"
+ },
+ {
+  "table_name": "month_closes"
+ },
+ {
+  "table_name": "monthly_settlements"
+ },
+ {
+  "table_name": "opening_balances"
+ },
+ {
+  "table_name": "rate_cards"
+ },
+ {
+  "table_name": "rooms"
+ },
+ {
+  "table_name": "utility_bills"
+ }
+]
+
+===== mess_settings =====
+[
+ {
+  "id": 1,
+  "hostel_name": "আল্লাহর দান ছাত্রাবাস-২",
+  "address": "আলমপুর (চকবাজার) ক্যাডেট কলেজ, রংপুর সদর, রংপুর",
+  "ramadan_mode": false,
+  "updated_at": "2026-09-30T14:21:17.622Z",
+  "solo_electricity_multiplier": 2,
+  "solo_wifi_multiplier": 1
+ }
+]
+
+===== rate_cards =====
+[
+ {
+  "id": "ac0fc94c-e95d-4b63-a35a-9534f4ea5ba2",
+  "label": "Starting defaults",
+  "effective_from": "2026-08-31T18:00:00.000Z",
+  "effective_to": null,
+  "full_meal_rate": 60,
+  "half_meal_rate": 35,
+  "guest_full_rate": 80,
+  "guest_half_rate": 45,
+  "sehri_rate": 70,
+  "feast_flat_charge": 200,
+  "khala_normal_rate": 300,
+  "khala_solo_rate": 400,
+  "manager_daily_fee": 30,
+  "daily_extra_amount": 300
+ }
+]
+
+===== rooms =====
+[
+ {
+  "id": "c94e4c26-a3d8-4597-ad69-83efadc5106c",
+  "number": "101",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "023f09c9-e987-4bf9-a09a-e5de6f948f35",
+  "number": "102",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "f65d393e-65ca-4b05-b468-f3525953ffae",
+  "number": "103",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "fc38705c-8fca-4725-9e09-994d538cf0b3",
+  "number": "104",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "9050532e-0f1c-4d65-b6d8-a6391be22c9f",
+  "number": "105",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "86f9d334-a9ae-46c7-81d6-fd5fc4017eb9",
+  "number": "106",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "e0456714-0f25-4de8-bf41-07b40ab932aa",
+  "number": "107",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "e631a0b0-df37-46e9-af90-6b356108dad0",
+  "number": "108",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "4bc6f343-5a6c-404b-8d7c-6bc729327a05",
+  "number": "109",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "1f3e4f3d-0f92-4d68-9f78-1746b33c3621",
+  "number": "110",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "5304247d-c1cd-4627-8cf5-c91307dd616b",
+  "number": "111",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "6d2357a1-4c50-4096-b495-bb1dafdb09ed",
+  "number": "112",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "d415b19d-14b9-4ebe-8344-1f3f203e4335",
+  "number": "201",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "1d357d3c-f342-434f-894a-f444162bdc76",
+  "number": "202",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "b7c17470-87a6-4a19-963c-eb750f074de4",
+  "number": "203",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "29389e15-a149-4665-bbe2-ccca212ab215",
+  "number": "204",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "b6ecf711-4ef9-4f45-a49a-0834e5d26805",
+  "number": "205",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "00ba03ab-1339-4623-8fdb-d4974e6ba48b",
+  "number": "206",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "f8428adf-3af5-4683-8f6e-df7b6f94e15a",
+  "number": "207",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "9a8f85f2-c587-4c2c-9f8b-38115b120501",
+  "number": "208",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "5ea39769-e0ab-448b-a55b-dec9f7fe75a1",
+  "number": "209",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "9aee9d10-a718-40ef-8380-f5a39c5dbf48",
+  "number": "210",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "12dbabdc-9ae6-4e42-85f4-c3832db0f3fa",
+  "number": "211",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "2770435f-9b7b-4853-89b8-03e6cb94c67d",
+  "number": "212",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "b3e1beaf-fd01-4523-b539-7f18fae32eac",
+  "number": "213",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ },
+ {
+  "id": "be3ef8ab-fa40-4490-aec7-96d239585286",
+  "number": "214",
+  "capacity": 2,
+  "solo": false,
+  "notes": null
+ }
+]
+
+===== members =====
+[
+ {
+  "id": "64ff155a-f825-485d-aec0-760b508e48e8",
+  "name": "Arif",
+  "room_id": "b6ecf711-4ef9-4f45-a49a-0834e5d26805",
+  "phone": "01817889900",
+  "blood_group": "AB-",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "c15fe707-012c-4926-bdcf-b69d70bc94eb",
+  "name": "Hasan",
+  "room_id": "023f09c9-e987-4bf9-a09a-e5de6f948f35",
+  "phone": null,
+  "blood_group": "AB+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "c1dfe4ac-f7b3-419e-aedf-ec3651563f98",
+  "name": "Jubayer",
+  "room_id": "f65d393e-65ca-4b05-b468-f3525953ffae",
+  "phone": null,
+  "blood_group": "A-",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "b172a7b0-3564-4c27-a405-4a843d088dd3",
+  "name": "Mahin",
+  "room_id": "d415b19d-14b9-4ebe-8344-1f3f203e4335",
+  "phone": "01716778899",
+  "blood_group": "A+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "f6bde022-e14e-4299-b9fc-91d3b6b03c5f",
+  "name": "Nayeem",
+  "room_id": "023f09c9-e987-4bf9-a09a-e5de6f948f35",
+  "phone": "01614556677",
+  "blood_group": "B+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "9b21b3aa-df1a-47c6-8f36-0cd92e9121dc",
+  "name": "Rakib",
+  "room_id": "e0456714-0f25-4de8-bf41-07b40ab932aa",
+  "phone": "01711223344",
+  "blood_group": "B+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "18272d9e-584c-44d6-93b8-005084992dec",
+  "name": "Rifat",
+  "room_id": "9050532e-0f1c-4d65-b6d8-a6391be22c9f",
+  "phone": null,
+  "blood_group": "B+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "88866bf0-b377-4912-86b7-4fc85a5e434f",
+  "name": "Sabbir",
+  "room_id": "c94e4c26-a3d8-4597-ad69-83efadc5106c",
+  "phone": "01812334455",
+  "blood_group": "A+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "b76759ac-40fd-47c4-a839-fe5e6b45186a",
+  "name": "Sajid",
+  "room_id": "1d357d3c-f342-434f-894a-f444162bdc76",
+  "phone": null,
+  "blood_group": "O+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "d8a0b055-ecc4-4ad4-858e-0fa40ed228dd",
+  "name": "Shakil",
+  "room_id": "f65d393e-65ca-4b05-b468-f3525953ffae",
+  "phone": "01515667788",
+  "blood_group": "O-",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "name": "Tanvir",
+  "room_id": "c94e4c26-a3d8-4597-ad69-83efadc5106c",
+  "phone": "01913445566",
+  "blood_group": "O+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ },
+ {
+  "id": "149fc9a9-a183-48a2-9afd-20ce2d973c09",
+  "name": "Uzzal",
+  "room_id": "e0456714-0f25-4de8-bf41-07b40ab932aa",
+  "phone": "01570210744",
+  "blood_group": "O+",
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null,
+  "notes": null
+ }
+]
+
+===== members_with_room =====
+[
+ {
+  "name": "Sabbir",
+  "room": "101",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Tanvir",
+  "room": "101",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Hasan",
+  "room": "102",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Nayeem",
+  "room": "102",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Jubayer",
+  "room": "103",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Shakil",
+  "room": "103",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Rifat",
+  "room": "105",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Rakib",
+  "room": "107",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Uzzal",
+  "room": "107",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Mahin",
+  "room": "201",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Sajid",
+  "room": "202",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ },
+ {
+  "name": "Arif",
+  "room": "205",
+  "capacity": 2,
+  "solo": false,
+  "active": true,
+  "join_date": "2026-08-31T18:00:00.000Z",
+  "leave_date": null
+ }
+]
+
+===== status_change_counts =====
+[
+ {
+  "member_id": "149fc9a9-a183-48a2-9afd-20ce2d973c09",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ },
+ {
+  "member_id": "88866bf0-b377-4912-86b7-4fc85a5e434f",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ },
+ {
+  "member_id": "9b21b3aa-df1a-47c6-8f36-0cd92e9121dc",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ },
+ {
+  "member_id": "c15fe707-012c-4926-bdcf-b69d70bc94eb",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ },
+ {
+  "member_id": "c1dfe4ac-f7b3-419e-aedf-ec3651563f98",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ },
+ {
+  "member_id": "d8a0b055-ecc4-4ad4-858e-0fa40ed228dd",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ },
+ {
+  "member_id": "f6bde022-e14e-4299-b9fc-91d3b6b03c5f",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ },
+ {
+  "member_id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "n": "1",
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z"
+ }
+]
+
+===== status_changes_all =====
+[
+ {
+  "member_id": "c15fe707-012c-4926-bdcf-b69d70bc94eb",
+  "name": "Hasan",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "FULL",
+  "sehri": false
+ },
+ {
+  "member_id": "c1dfe4ac-f7b3-419e-aedf-ec3651563f98",
+  "name": "Jubayer",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "HALF_NIGHT",
+  "sehri": false
+ },
+ {
+  "member_id": "f6bde022-e14e-4299-b9fc-91d3b6b03c5f",
+  "name": "Nayeem",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "HALF_DAY",
+  "sehri": false
+ },
+ {
+  "member_id": "9b21b3aa-df1a-47c6-8f36-0cd92e9121dc",
+  "name": "Rakib",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "FULL",
+  "sehri": false
+ },
+ {
+  "member_id": "88866bf0-b377-4912-86b7-4fc85a5e434f",
+  "name": "Sabbir",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "HALF_NIGHT",
+  "sehri": false
+ },
+ {
+  "member_id": "d8a0b055-ecc4-4ad4-858e-0fa40ed228dd",
+  "name": "Shakil",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "FULL",
+  "sehri": false
+ },
+ {
+  "member_id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "name": "Tanvir",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "OFF",
+  "sehri": false
+ },
+ {
+  "member_id": "149fc9a9-a183-48a2-9afd-20ce2d973c09",
+  "name": "Uzzal",
+  "date": "2026-09-29T18:00:00.000Z",
+  "status": "FULL",
+  "sehri": false
+ }
+]
+
+===== guest_meals =====
+[
+ {
+  "member_id": "f6bde022-e14e-4299-b9fc-91d3b6b03c5f",
+  "name": "Nayeem",
+  "date": "2026-09-29T18:00:00.000Z",
+  "type": "GUEST_HALF",
+  "count": 2
+ },
+ {
+  "member_id": "d8a0b055-ecc4-4ad4-858e-0fa40ed228dd",
+  "name": "Shakil",
+  "date": "2026-09-29T18:00:00.000Z",
+  "type": "GUEST_FULL",
+  "count": 1
+ },
+ {
+  "member_id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "name": "Tanvir",
+  "date": "2026-09-29T18:00:00.000Z",
+  "type": "GUEST_HALF",
+  "count": 2
+ }
+]
+
+===== utility_bills =====
+[
+ {
+  "month": "2026-08-31T18:00:00.000Z",
+  "type": "ELECTRICITY",
+  "amount": 600000
+ },
+ {
+  "month": "2026-08-31T18:00:00.000Z",
+  "type": "WIFI",
+  "amount": 15000
+ }
+]
+
+===== deposits =====
+[]
+
+===== opening_balances =====
+[]
+
+===== extras_manual =====
+[
+ {
+  "date": "2026-09-29T18:00:00.000Z",
+  "label": "fridge repare",
+  "amount": 6000,
+  "category": "ONE_OFF",
+  "show_in_daily_budget": false,
+  "is_auto": false,
+  "source_key": null,
+  "voided": false
+ }
+]
+
+===== extras_auto_summary =====
+[
+ {
+  "date": "2026-09-29T18:00:00.000Z",
+  "label": "Daily recurring Extra",
+  "amount": 300,
+  "category": "RECURRING_DAILY",
+  "show_in_daily_budget": true,
+  "source_key": "auto:daily-extra:2026-09-30",
+  "voided": false,
+  "count": "1"
+ },
+ {
+  "date": "2026-09-29T18:00:00.000Z",
+  "label": "Manager's daily fee",
+  "amount": 30,
+  "category": "MANAGER_FEE",
+  "show_in_daily_budget": true,
+  "source_key": "auto:manager-fee:2026-09-30",
+  "voided": false,
+  "count": "1"
+ }
+]
+
+===== extras_auto_daily_range =====
+[
+ {
+  "first": "2026-09-29T18:00:00.000Z",
+  "last": "2026-09-29T18:00:00.000Z",
+  "rows": "2",
+  "voided": "0",
+  "total": "330"
+ }
+]
+
+===== bazar_records =====
+[
+ {
+  "id": "b803f453-5d87-4892-a77f-345d13154970",
+  "date": "2026-09-29T18:00:00.000Z",
+  "full_meal_count": 4,
+  "full_meal_amount": 240,
+  "half_meal_count": 3,
+  "half_meal_amount": 105,
+  "guest_full_count": 1,
+  "guest_full_amount": 80,
+  "guest_half_count": 4,
+  "guest_half_amount": 180,
+  "extra_amount": 300,
+  "total_budget": 850,
+  "deduction_amount": 0,
+  "deduction_reason": null,
+  "advance_given": 900,
+  "actual_expense": 850,
+  "change_returned": 50,
+  "menu_night": null,
+  "menu_morning": null,
+  "menu_noon": null,
+  "created_at": "2026-09-30T14:29:08.567Z",
+  "updated_at": "2026-09-30T15:37:27.356Z"
+ }
+]
+
+===== month_closes =====
+[]
+
+===== monthly_settlements =====
+[]
+
+===== settlement_totals =====
+[]
+
+===== accounts =====
+[
+ {
+  "id": "e1c0647d-4ba0-45f2-95c3-ea6202bdc36b",
+  "username": "munna",
+  "display_name": "Mess Owner",
+  "role": "OWNER",
+  "active": true,
+  "created_at": "2026-09-30T14:23:33.141Z"
+ }
+]
+
+===== audit_log =====
+[
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳330",
+  "created_at": "2026-09-30T14:29:08.567Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳330",
+  "created_at": "2026-09-30T14:52:51.712Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "88866bf0-b377-4912-86b7-4fc85a5e434f",
+  "summary": "Set Sabbir to FULL from 2026-09-30",
+  "created_at": "2026-09-30T14:53:03.106Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "summary": "Set Tanvir to HALF_DAY from 2026-09-30",
+  "created_at": "2026-09-30T14:53:03.623Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "c15fe707-012c-4926-bdcf-b69d70bc94eb",
+  "summary": "Set Hasan to FULL from 2026-09-30",
+  "created_at": "2026-09-30T14:53:03.974Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "f6bde022-e14e-4299-b9fc-91d3b6b03c5f",
+  "summary": "Set Nayeem to HALF_DAY from 2026-09-30",
+  "created_at": "2026-09-30T14:53:04.585Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "d8a0b055-ecc4-4ad4-858e-0fa40ed228dd",
+  "summary": "Set Shakil to FULL from 2026-09-30",
+  "created_at": "2026-09-30T14:53:06.312Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "c1dfe4ac-f7b3-419e-aedf-ec3651563f98",
+  "summary": "Set Jubayer to FULL from 2026-09-30",
+  "created_at": "2026-09-30T14:53:06.608Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "9b21b3aa-df1a-47c6-8f36-0cd92e9121dc",
+  "summary": "Set Rakib to FULL from 2026-09-30",
+  "created_at": "2026-09-30T14:53:07.498Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "149fc9a9-a183-48a2-9afd-20ce2d973c09",
+  "summary": "Set Uzzal to FULL from 2026-09-30",
+  "created_at": "2026-09-30T14:53:07.744Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳760",
+  "created_at": "2026-09-30T14:53:14.119Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳760",
+  "created_at": "2026-09-30T14:53:15.343Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.guest.clear",
+  "entity_type": "member",
+  "entity_id": "f6bde022-e14e-4299-b9fc-91d3b6b03c5f",
+  "summary": "Removed full guest meals for Nayeem on 2026-09-30",
+  "created_at": "2026-09-30T14:53:28.624Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.guest.set",
+  "entity_type": "member",
+  "entity_id": "f6bde022-e14e-4299-b9fc-91d3b6b03c5f",
+  "summary": "Set 2 half guest meals for Nayeem on 2026-09-30",
+  "created_at": "2026-09-30T14:53:28.666Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.guest.set",
+  "entity_type": "member",
+  "entity_id": "d8a0b055-ecc4-4ad4-858e-0fa40ed228dd",
+  "summary": "Set 1 full guest meal for Shakil on 2026-09-30",
+  "created_at": "2026-09-30T14:53:31.726Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.guest.clear",
+  "entity_type": "member",
+  "entity_id": "d8a0b055-ecc4-4ad4-858e-0fa40ed228dd",
+  "summary": "Removed half guest meals for Shakil on 2026-09-30",
+  "created_at": "2026-09-30T14:53:31.766Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳915",
+  "created_at": "2026-09-30T14:53:35.738Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳915",
+  "created_at": "2026-09-30T14:53:36.844Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "88866bf0-b377-4912-86b7-4fc85a5e434f",
+  "summary": "Set Sabbir to HALF_NIGHT from 2026-09-30",
+  "created_at": "2026-09-30T14:58:39.570Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "c15fe707-012c-4926-bdcf-b69d70bc94eb",
+  "summary": "Set Hasan to HALF_NIGHT from 2026-09-30",
+  "created_at": "2026-09-30T14:58:40.645Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "c15fe707-012c-4926-bdcf-b69d70bc94eb",
+  "summary": "Set Hasan to HALF_DAY from 2026-09-30",
+  "created_at": "2026-09-30T14:58:41.062Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "c1dfe4ac-f7b3-419e-aedf-ec3651563f98",
+  "summary": "Set Jubayer to HALF_NIGHT from 2026-09-30",
+  "created_at": "2026-09-30T14:58:42.101Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "summary": "Set Tanvir to OFF from 2026-09-30",
+  "created_at": "2026-09-30T14:58:44.152Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.guest.clear",
+  "entity_type": "member",
+  "entity_id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "summary": "Removed full guest meals for Tanvir on 2026-09-30",
+  "created_at": "2026-09-30T14:58:46.382Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.guest.set",
+  "entity_type": "member",
+  "entity_id": "f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9",
+  "summary": "Set 2 half guest meals for Tanvir on 2026-09-30",
+  "created_at": "2026-09-30T14:58:46.427Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "extra.create",
+  "entity_type": "extra",
+  "entity_id": "2026-09-30",
+  "summary": "Added extra \"fridge repare\" of ৳6,000 on 2026-09-30",
+  "created_at": "2026-09-30T15:02:45.150Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bill.save",
+  "entity_type": "utility_bill",
+  "entity_id": "2026-09:ELECTRICITY",
+  "summary": "Set electricity bill for 2026-09 to ৳6,00,000",
+  "created_at": "2026-09-30T15:03:01.214Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bill.save",
+  "entity_type": "utility_bill",
+  "entity_id": "2026-09:WIFI",
+  "summary": "Set wifi bill for 2026-09 to ৳15,000",
+  "created_at": "2026-09-30T15:03:02.402Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "meal.status.set",
+  "entity_type": "member",
+  "entity_id": "c15fe707-012c-4926-bdcf-b69d70bc94eb",
+  "summary": "Set Hasan to FULL from 2026-09-30",
+  "created_at": "2026-09-30T15:31:37.959Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳850",
+  "created_at": "2026-09-30T15:31:41.319Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳850",
+  "created_at": "2026-09-30T15:37:15.022Z"
+ },
+ {
+  "actor_name": "Mess Owner",
+  "action": "bazar.confirm",
+  "entity_type": "bazar_day",
+  "entity_id": "2026-09-30",
+  "summary": "Confirmed the bazar for 2026-09-30 — budget ৳850",
+  "created_at": "2026-09-30T15:37:27.356Z"
+ }
+]
+
+===== login_attempts =====
+[
+ {
+  "username": "munna",
+  "succeeded": false,
+  "reason": "bad-password",
+  "created_at": "2026-09-30T14:24:18.148Z"
+ },
+ {
+  "username": "munna",
+  "succeeded": false,
+  "reason": "bad-password",
+  "created_at": "2026-09-30T14:24:25.903Z"
+ },
+ {
+  "username": "munna",
+  "succeeded": true,
+  "reason": null,
+  "created_at": "2026-09-30T14:24:34.367Z"
+ }
+]

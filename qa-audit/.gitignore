@@ -1,0 +1,5 @@
+# Local audit database and generated copies of application source used as test
+# fixtures. Not part of the audit record.
+/.pglite-qa/
+/mutation/gen/
+/mutation/validation/

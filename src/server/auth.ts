@@ -76,7 +76,11 @@ export async function requireSession(): Promise<SessionUser> {
     .limit(1);
 
   if (!account || !account.active) {
-    redirect("/login");
+    // The cookie is still cryptographically valid, so `proxy.ts` would bounce
+    // /login straight back to /today and the user would never reach the sign-in
+    // form — an endless redirect. `stale=1` tells proxy the session is dead so
+    // it lets the login page through; the cookie is then replaced on sign-in.
+    redirect("/login?stale=1");
   }
 
   return {

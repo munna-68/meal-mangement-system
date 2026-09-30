@@ -1,0 +1,38 @@
+{
+  "today": "2026-09-30",
+  "month": "2026-09",
+  "meters": {
+    "Meal cost today (Meal Status card)": 580,
+    "Bazar budget (Today page + slip)": 850,
+    "guest deduction applied on the bazar slip": 25,
+    "manager fee held back from bazar cash": 30,
+    "Settlement: sum of member meal charges": 605,
+    "Settlement: Khala+Wifi+Electricity column total": 619000,
+    "Settlement: Extras share column total": 6300,
+    "Settlement: Total cost column total": 625905,
+    "Settlement: closing balance total": -625905,
+    "Extras & Bills: extras pool total": 6300,
+    "Extras & Bills: extras per head": 525,
+    "Extras & Bills: utility pool total": 619000,
+    "Extras & Bills: utility per head (FLAT)": 51583,
+    "engine: extras pool total": 6300,
+    "engine: extras per member": 525,
+    "Balances: utility cost total": 619000,
+    "Balances: extra cost total": 6300,
+    "Balances: accrued cost total": 625905,
+    "Balances: Mess float": -625905,
+    "Pool: electricity entered": 600000,
+    "Pool: wifi entered": 15000,
+    "Pool: khala (computed from the rate card)": 4000,
+    "Pool: utility total (electricity + wifi + khala)": 619000,
+    "Distinct per-member utility shares actually charged": [
+      39050,
+      76650
+    ],
+    "Register: total full days": 4,
+    "Settlement: total full days": 4,
+    "Register: total half days": 3,
+    "Settlement: total half days": 3,
+    "Settlement: guest full / half": "1 / 4"
+  }
+}

@@ -228,9 +228,15 @@ function sameRoom(a: string, b: string): boolean {
 
 /**
  * Maps a CSV row onto a real member by name, using the room number only to
- * break a tie between two members who share a name. A name that is not in the
- * mess is reported rather than guessed at — creating a wrong deposit is worse
- * than asking the manager to fix the row.
+ * break a tie between two members who share a name.
+ *
+ * The match is exact, after normalising case and spacing. A partial name is
+ * deliberately *not* guessed at: "Rahim" is not matched to "Abdur Rahim", and
+ * "Q" is not matched to "QA-B". The input is usually a CSV read off a
+ * handwritten book, where a name is easily truncated — and a deposit silently
+ * credited to the wrong person is far worse than one skipped row the manager
+ * has to fix. An unmatched row is reported with the members it *could* have
+ * meant, so fixing it takes seconds.
  */
 export function resolveMember(
   name: string,
@@ -241,14 +247,9 @@ export function resolveMember(
   if (!needle) return { ok: false, reason: "not-found", candidates: [] };
 
   const all = members.map((member) => member.id);
-  let candidates = members.filter((member) => normalise(member.name) === needle);
-
-  if (candidates.length === 0) {
-    candidates = members.filter((member) => {
-      const target = normalise(member.name);
-      return target.includes(needle) || needle.includes(target);
-    });
-  }
+  const candidates = members.filter(
+    (member) => normalise(member.name) === needle,
+  );
 
   if (candidates.length === 0) return { ok: false, reason: "not-found", candidates: all };
   if (candidates.length > 1 && room) {

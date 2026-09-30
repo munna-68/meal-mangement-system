@@ -62,6 +62,8 @@ import {
   parseDateCell,
   resolveMember,
 } from "../src/lib/import-csv";
+import { firstIssue, takaAmount } from "../src/lib/action-result";
+import { isValidDateKey, isValidMonthKey } from "../src/lib/dates";
 
 let passed = 0;
 const failures: string[] = [];
@@ -312,6 +314,32 @@ section("Daily budget");
   check("worked meals subtotal (150+40-15)", workedTotals.mealsSubtotal, 175);
   check("worked total budget (meals 175 - managerFee 30)", workedTotals.totalBudget, 145);
 
+  // A day that costs less than the manager's fee must not produce a negative
+  // budget: the fee is capped at what the day actually cost.
+  const cheapDay = computeDayTotals({
+    date: "2025-03-06",
+    members: MEMBERS,
+    changes: [{ memberId: "m1", date: "2025-03-06", status: "HALF_DAY", sehri: false }],
+    guestMeals: [],
+    extras: [],
+    rateCard: { ...RATE_CARD, halfMealRate: 60, managerDailyFee: 30 },
+    today: "2025-03-31",
+  });
+  check("an ordinary day carries the manager's full fee", cheapDay.managerFeeAmount, 30);
+  check("an ordinary day's budget is meals - fee", cheapDay.totalBudget, 30);
+
+  const poorerDay = computeDayTotals({
+    date: "2025-03-06",
+    members: MEMBERS,
+    changes: [{ memberId: "m1", date: "2025-03-06", status: "HALF_DAY", sehri: false }],
+    guestMeals: [],
+    extras: [],
+    rateCard: { ...RATE_CARD, halfMealRate: 5, managerDailyFee: 30 },
+    today: "2025-03-31",
+  });
+  check("the fee is capped at the day's cost", poorerDay.managerFeeAmount, 5);
+  check("the budget never goes negative", poorerDay.totalBudget, 0);
+
   const voidedExtras = extras.map((e) =>
     e.id === "e1" ? { ...e, voided: true } : e,
   );
@@ -490,7 +518,7 @@ section("Extra pool");
     extras: MARCH_EXTRAS,
     from: "2025-03-01",
     to: "2025-03-31",
-    activeMemberCount: 4,
+    activeMemberIds: ["m1", "m2", "m3", "m4"],
   });
   check("pool sums every item regardless of daily-budget flag", pool.total, 1500);
   check("split evenly across members", pool.perMember, 375);
@@ -507,9 +535,73 @@ section("Extra pool");
     }],
     from: "2025-03-01",
     to: "2025-03-31",
-    activeMemberCount: 4,
+    activeMemberIds: ["m1", "m2", "m3", "m4"],
   });
   check("voided items are excluded from the pool", withVoided.total, 1500);
+
+  // The remainder is handed out, not rounded away: the shares always add back up
+  // to the pool, whatever the pool and however many members there are.
+  const awkward = extraPoolForRange({
+    extras: [
+      {
+        id: "odd",
+        date: "2025-03-10",
+        label: "awkward",
+        amount: 6301,
+        category: "ONE_OFF",
+        showInDailyBudget: false,
+        voided: false,
+      },
+    ],
+    from: "2025-03-01",
+    to: "2025-03-31",
+    activeMemberIds: Array.from({ length: 12 }, (_, i) => `e${i + 1}`),
+  });
+  check("an awkward pool is still the exact total", awkward.total, 6301);
+  check(
+    "the shares add back up to the pool to the taka",
+    [...awkward.shares.values()].reduce((a, b) => a + b, 0),
+    6301,
+  );
+  check(
+    "shares differ by at most one taka",
+    Math.max(...awkward.shares.values()) - Math.min(...awkward.shares.values()),
+    1,
+  );
+  check("11 members carry 525 and one carries 526", [...awkward.shares.values()].sort((a, b) => a - b).slice(-1), [526]);
+
+  const tiny = extraPoolForRange({
+    extras: [{ ...MARCH_EXTRAS[0], id: "t", amount: 1 }],
+    from: "2025-03-01",
+    to: "2025-03-31",
+    activeMemberIds: Array.from({ length: 12 }, (_, i) => `e${i + 1}`),
+  });
+  check(
+    "a single taka is given to one member rather than lost",
+    [...tiny.shares.values()].reduce((a, b) => a + b, 0),
+    1,
+  );
+
+  const eightWay = extraPoolForRange({
+    extras: [{ ...MARCH_EXTRAS[0], id: "f", amount: 5 }],
+    from: "2025-03-01",
+    to: "2025-03-31",
+    activeMemberIds: Array.from({ length: 8 }, (_, i) => `e${i + 1}`),
+  });
+  check(
+    "a 5 taka pool over 8 members is not inflated to 8",
+    [...eightWay.shares.values()].reduce((a, b) => a + b, 0),
+    5,
+  );
+
+  const nobody = extraPoolForRange({
+    extras: MARCH_EXTRAS,
+    from: "2025-03-01",
+    to: "2025-03-31",
+    activeMemberIds: [],
+  });
+  check("a month with nobody in it charges nobody", nobody.memberCount, 0);
+  check("…and the pool total is still reported", nobody.total, 1500);
 
   // Fixed daily extra summary (user spec: 28 days @ ৳300 = ৳8,400 ÷ 30 members = ৳280/head)
   const fixedSummary = computeMonthlyFixedExtraSummary({
@@ -676,24 +768,21 @@ section("Running balance (month-to-date)");
   const m2 = result.rows.find((r) => r.memberId === "m2")!;
 
   check("period starts at the open month", result.periodStart, "2025-03-01");
-  // 20 of March's 31 days. Meals accrue per day; Khala, electricity and wifi are
-  // flat monthly amounts accrued by the same 20/31 fraction.
+  // Meals accrue per day, the flat monthly charges do not.
   //   20 x 60 = 1200
-  //   Khala     round(300 x 20/31) = 194
-  //   Elec+wifi round(200 x 20/31) + round(125 x 20/31) = 129 + 81 = 210
-  //   Extra     the pool is already date-bounded, so it is not pro-rated: 375
-  check("20 full meals to date", m1.cost, 1200 + 194 + 210 + 375);
-  check("balance = 5000 - 1979", m1.balance, 5000 - (1200 + 194 + 210 + 375));
-  check("member with no deposit is in deficit", m2.balance, -(1200 + 194 + 210 + 375));
+  //   Khala 300, Elec 200 + wifi 125, Extra pool 375 (1500 ÷ 4)
+  check("20 full meals to date", m1.cost, 1200 + 300 + 325 + 375);
+  check("balance = 5000 - 2200", m1.balance, 5000 - (1200 + 300 + 325 + 375));
+  check("member with no deposit is in deficit", m2.balance, -(1200 + 300 + 325 + 375));
   check("deficit count", result.summary.membersInDeficit, 3);
-  // m3 is solo in a 2-bed room: Khala round(400 x 20/31) = 258 and
-  // round(400 x 20/31) + round(125 x 20/31) = 258 + 81 = 339.
+  // m3 is alone in a 2-bed room: Khala 400, electricity 400 (double weight),
+  // wifi 125.
   const m3 = result.rows.find((r) => r.memberId === "m3")!;
-  check("solo member's month-to-date cost", m3.cost, 1200 + 258 + 339 + 375);
+  check("solo member's month-to-date cost", m3.cost, 1200 + 400 + 525 + 375);
   check(
-    "mess-wide balance = 5000 - 1979 - 1979 - 2172 - 1979",
+    "mess-wide balance = 5000 - 2200 - 2200 - 2500 - 2200",
     result.summary.balance,
-    5000 - 1979 - 1979 - 2172 - 1979,
+    5000 - 2200 - 2200 - 2500 - 2200,
   );
 }
 
@@ -726,10 +815,10 @@ section("Running balance after a closed month");
   const m1 = result.rows.find((r) => r.memberId === "m1")!;
   check("period resumes after the closed month", result.periodStart, "2025-04-01");
   check("opening balance comes from the closed month", m1.openingBalance, 2165);
-  // Meal costs accrue day by day (5 x 60), and the month-level flat charges
-  // accrue too: Khala round(300 x 5/30) = 50 rather than the whole 300.
-  check("5 April days at 60, plus 5 days of accrued Khala", m1.cost, 5 * 60 + 50);
-  check("balance = 2165 - 350", m1.balance, 1815);
+  // Meal costs accrue day by day (5 x 60). Khala is the whole month's 300,
+  // because the flat monthly charges are never pro-rated.
+  check("5 April days at 60, plus the full month of Khala", m1.cost, 5 * 60 + 300);
+  check("balance = 2165 - 600", m1.balance, 1565);
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,21 +1103,20 @@ section("Open period starts where the data starts");
   const m4 = result.rows.find((r) => r.memberId === "m4")!;
 
   // m1: Feb 10-28 (19 days) + Mar 1-5 (5 days) = 24 full days at 60 = 1440,
-  // plus February's Khala in full (that month is over: 300) and March's Khala
-  // accrued over 5 of its 31 days: round(300 x 5/31) = 48.
-  check("February's meals are included", m1.cost, 24 * 60 + 300 + 48);
+  // plus a whole month's Khala for each of February and March: 300 x 2 = 600.
+  check("February's meals are included", m1.cost, 24 * 60 + 600);
   // The others never had a status recorded, so they only carry month charges:
-  // Khala normal in full for February plus 5/31 of it in March, solo for m3.
-  check("no status means only month-level charges (shared room)", m2.cost, 300 + 48);
-  check("no status means only month-level charges (alone in a 2-bed)", m3.cost, 400 + 65);
-  check("no status means only month-level charges (1-bed room)", m4.cost, 300 + 48);
+  // two whole months of Khala, the solo rate for m3.
+  check("no status means only month-level charges (shared room)", m2.cost, 600);
+  check("no status means only month-level charges (alone in a 2-bed)", m3.cost, 800);
+  check("no status means only month-level charges (1-bed room)", m4.cost, 600);
 }
 
 // ---------------------------------------------------------------------------
 // FIX 6 — flat monthly charges accrue day by day
 // ---------------------------------------------------------------------------
 
-section("Flat monthly charges accrue day by day");
+section("Flat monthly charges are charged in full for the whole month");
 {
   const base = {
     month: "2025-03",
@@ -1039,36 +1127,33 @@ section("Flat monthly charges accrue day by day");
     rateCards: [RATE_CARD],
   };
 
-  // Day 10 of a 31-day month. Every flat charge is a tenth-ish of the month.
+  // Day 10 of a 31-day month. The flat charges are already the whole month;
+  // only the meals are still counting up.
   const tenth = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-10" });
   const t1 = tenth.perMember.get("m1")!;
-  check("day 10 of 31: Khala accrued, not billed in full", t1.khalaAmount, Math.round((300 * 10) / 31));
-  check("day 10 of 31: electricity accrued", t1.electricityAmount, Math.round((200 * 10) / 31));
-  check("day 10 of 31: wifi accrued", t1.wifiAmount, Math.round((125 * 10) / 31));
-  check("day 10 of 31: 10 days of meals", t1.mealAmount, 10 * 60);
-  check(
-    "day 10 of 31 is nowhere near a full month of flat charges",
-    t1.khalaElecWifiAmount < 300 + 325,
-    true,
-  );
+  check("day 10 of 31: Khala is the full month", t1.khalaAmount, 300);
+  check("day 10 of 31: electricity is the full month", t1.electricityAmount, 200);
+  check("day 10 of 31: wifi is the full month", t1.wifiAmount, 125);
+  check("day 10 of 31: meals are only the days that have happened", t1.mealAmount, 10 * 60);
 
-  // Day one of the month: one day of everything, not a whole month.
+  // Day one of the month: the same flat charges, one day of meals.
   const first = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-01" });
   const f1 = first.perMember.get("m1")!;
-  check("day 1 of 31: one day of Khala", f1.khalaAmount, Math.round(300 / 31));
-  check("day 1 of 31: one day of electricity", f1.electricityAmount, Math.round(200 / 31));
+  check("day 1 of 31: Khala is the full month", f1.khalaAmount, 300);
+  check("day 1 of 31: electricity is the full month", f1.electricityAmount, 200);
+  check("day 1 of 31: wifi is the full month", f1.wifiAmount, 125);
   check("day 1 of 31: one day of meals", f1.mealAmount, 60);
-  check("day 1 of 31: one day of wifi", f1.wifiAmount, Math.round(125 / 31));
 
-  // A month that has finished still bills in full, so settlements are unchanged.
+  // A finished month bills exactly the same flat charges.
   const finished = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-04-15" });
   const d1 = finished.perMember.get("m1")!;
   check("a finished month bills Khala in full", d1.khalaAmount, 300);
   check("a finished month bills the full electricity share", d1.electricityAmount, 200);
   check("a finished month bills the full wifi share", d1.wifiAmount, 125);
-  check("a finished month bills the full extra share", finished.perMember.get("m3")!.khalaAmount, 400);
+  check("a finished month bills the full solo Khala", finished.perMember.get("m3")!.khalaAmount, 400);
 
-  // A late joiner only accrues from their own first day.
+  // A late joiner pays the same full month as everybody else, but only the meals
+  // they actually ate.
   const lateJoiner = member("m9", "C", { joinDate: "2025-03-25" });
   const arrived = computeMonth({
     month: "2025-03",
@@ -1081,19 +1166,18 @@ section("Flat monthly charges accrue day by day");
     rateCards: [RATE_CARD],
     today: "2025-03-25",
   });
-  check("a member who arrived today pays one day of Khala", arrived.perMember.get("m9")!.khalaAmount, Math.round(300 / 31));
+  check("a member who arrived today still pays a full month of Khala", arrived.perMember.get("m9")!.khalaAmount, 300);
   check("a member who arrived today pays one day of meals", arrived.perMember.get("m9")!.mealAmount, 60);
 
-  // The extra pool is already built from dated line items, so it is NOT
-  // pro-rated again — it grows as items land rather than being charged up front.
+  // The extra pool is built from dated line items, so it grows as items land
+  // rather than being charged up front.
   const earlyPool = computeMonth({ ...base, extras: MARCH_EXTRAS, bills: [], today: "2025-03-05" });
   const latePool = computeMonth({ ...base, extras: MARCH_EXTRAS, bills: [], today: "2025-03-31" });
   check("the pool only contains items dated so far", earlyPool.perMember.get("m1")!.extraAmount, 250);
   check("the pool grows as more items land", latePool.perMember.get("m1")!.extraAmount, 375);
 
-  // Billing a month — closing it, or previewing that close — charges the flat
-  // charges in full even when the month has not finished. Otherwise closing a
-  // month on the 10th would permanently under-charge everyone by 21/31.
+  // Billing a month — closing it, or previewing that close — now changes nothing
+  // about the money, because the live view already charges the full month.
   const billing = computeMonth({
     ...base,
     extras: [],
@@ -1101,16 +1185,16 @@ section("Flat monthly charges accrue day by day");
     finalize: true,
     today: "2025-03-10",
   });
-  check("finalize: Khala is billed in full mid-month", billing.perMember.get("m1")!.khalaAmount, 300);
-  check("finalize: electricity is billed in full", billing.perMember.get("m1")!.electricityAmount, 200);
-  check("finalize: wifi is billed in full", billing.perMember.get("m1")!.wifiAmount, 125);
-  check("finalize: a solo member's Khala is billed in full", billing.perMember.get("m3")!.khalaAmount, 400);
+  check("finalize: Khala is the full month", billing.perMember.get("m1")!.khalaAmount, 300);
+  check("finalize: electricity is the full month", billing.perMember.get("m1")!.electricityAmount, 200);
+  check("finalize: wifi is the full month", billing.perMember.get("m1")!.wifiAmount, 125);
+  check("finalize: a solo member's Khala is the full month", billing.perMember.get("m3")!.khalaAmount, 400);
   check("finalize: meals still stop at today", billing.perMember.get("m1")!.mealAmount, 10 * 60);
   check(
-    "finalize does not leak into the live view of the same month",
+    "the live view of the same month charges exactly the same flat charges",
     computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-10" }).perMember.get("m1")!
       .khalaAmount,
-    Math.round((300 * 10) / 31),
+    300,
   );
 }
 
@@ -1385,7 +1469,7 @@ section("Declared opening balance seeds the first open month");
   check(
     "balance = opening + deposits - cost",
     b1.balance,
-    900 + 5000 - (1200 + 194 + 210 + 375),
+    900 + 5000 - (1200 + 300 + 325 + 375),
   );
   check("members without a declared opening still start at zero", b2.openingBalance, 0);
 
@@ -1407,7 +1491,7 @@ section("Declared opening balance seeds the first open month");
   });
   const o1 = override.rows.find((r) => r.memberId === "m1")!;
   check("declared opening overrides the carried closing balance", o1.openingBalance, 500);
-  check("balance uses the overridden opening", o1.balance, 500 - (5 * 60 + 50));
+  check("balance uses the overridden opening", o1.balance, 500 - (5 * 60 + 300));
 
   // No double counting: a declared opening for a *later* month in the open
   // period is ignored by the running total, which already rolls each month
@@ -1615,6 +1699,16 @@ section("CSV row to member matching");
   check("unique name", resolveMember("Karim", "", members), { ok: true, id: "m2" });
   check("unknown name", resolveMember("Nobody", "", members).ok, false);
   check("blank name is not matched", resolveMember("", "101", members).ok, false);
+  // A partial name is refused rather than guessed at: crediting a deposit to the
+  // wrong person is far worse than skipping one row.
+  check("a partial name is refused, not guessed", resolveMember("Rahi", "", members).ok, false);
+  check("a first name is refused, not guessed", resolveMember("Kari", "", members).ok, false);
+  check("a room does not rescue a partial name", resolveMember("Rahi", "101", members).ok, false);
+  check(
+    "the candidates of a refused row are reported back",
+    resolveMember("Rahi", "", members),
+    { ok: false, reason: "not-found", candidates: ["m1", "m2", "m3"] },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1918,7 +2012,7 @@ section("Two separate cost pools, khala bill, and manager fee deduction");
     extras: extrasList,
     from: "2026-09-01",
     to: "2026-09-30",
-    activeMemberCount: 12,
+    activeMemberIds: Array.from({ length: 12 }, (_, i) => `u${i + 1}`),
   });
 
   check("extras pool excludes manager fee", pool.total, 6300);
@@ -2084,7 +2178,9 @@ section("Room-capacity utility split and exact pool reconciliation");
   const totalSettlementUtility = [...calc.perMember.values()].reduce((acc, r) => acc + r.khalaElecWifiAmount, 0);
   check("settlement utility column total equals utility pool total (619,000) exactly", totalSettlementUtility, 619000);
 
-  // Verify with an uneven number requiring rounding distribution
+  // Verify with an uneven number requiring rounding distribution. Khala comes
+  // from the rate card (8 × 300 + 4 × 400 = 3,600), so the saved Khala bill is
+  // deliberately ignored — a bill cannot change the rate the mess charges.
   const unevenBills: UtilityBillData[] = [
     { month: "2026-09", type: "ELECTRICITY", amount: 600001 },
     { month: "2026-09", type: "WIFI", amount: 15001 },
@@ -2104,9 +2200,55 @@ section("Room-capacity utility split and exact pool reconciliation");
     soloWifiMultiplier: 1,
     today: "2026-09-30",
   });
-  const unevenPoolTotal = 600001 + 15001 + 4001;
+  const unevenPoolTotal = 600001 + 15001 + 8 * 300 + 4 * 400;
   const unevenSettlementTotal = [...unevenCalc.perMember.values()].reduce((acc, r) => acc + r.khalaElecWifiAmount, 0);
-  check("rounding distribution ensures uneven total (619,003) matches exactly", unevenSettlementTotal, unevenPoolTotal);
+  check("rounding distribution ensures uneven total matches exactly", unevenSettlementTotal, unevenPoolTotal);
+  check("a saved Khala bill does not change the Khala charged", unevenCalc.perMember.get("u1")!.khalaAmount, 300);
+}
+
+// ---------------------------------------------------------------------------
+// Input handling: money typed by a human, and month keys
+// ---------------------------------------------------------------------------
+
+section("Money typed into a form");
+{
+  const parse = takaAmount(0);
+  const read = (value: unknown) => parse.safeParse(value);
+
+  check("plain digits", read(1500).success && read(1500).data, 1500);
+  check("a numeric string", read("1500").data, 1500);
+  check("the taka sign is ignored", read("৳1500").data, 1500);
+  check("lakh grouping is accepted", read("1,50,000").data, 150000);
+  check("Bengali digits are accepted", read("৳১,৫০০").data, 1500);
+  check("a negative amount is refused", read("-50").success, false);
+  check("a decimal is refused", read("12.50").success, false);
+  check("text is refused", read("abc").success, false);
+  // An empty box used to become ৳0 and write a ৳0 row into the pool.
+  check("an empty box is refused, not ৳0", read("").success, false);
+  check("a whitespace-only box is refused", read("   ").success, false);
+  check("a missing value is refused", read(undefined).success, false);
+
+  const positive = takaAmount(1);
+  check("an extra item cannot be ৳0", positive.safeParse(0).success, false);
+  check("an extra item of ৳1 is fine", positive.safeParse(1).data, 1);
+
+  // The message the manager sees must name the problem in words.
+  const message = firstIssue(read("abc").error, "fallback");
+  check("the rejection reads as a sentence", /amount/i.test(message), true);
+  check("no raw library message leaks", message.startsWith("Invalid input:"), false);
+}
+
+section("Month and date keys");
+{
+  check("a real month is accepted", isValidMonthKey("2026-09"), true);
+  check("month 00 is refused", isValidMonthKey("2026-00"), false);
+  check("month 13 is refused", isValidMonthKey("2026-13"), false);
+  check("month 99 is refused", isValidMonthKey("2026-99"), false);
+  check("a short key is refused", isValidMonthKey("2026-9"), false);
+  check("a date key is refused", isValidMonthKey("2026-09-01"), false);
+  check("a real date is accepted", isValidDateKey("2026-09-30"), true);
+  check("30 February is refused", isValidDateKey("2026-02-30"), false);
+  check("29 February 2028 is accepted", isValidDateKey("2028-02-29"), true);
 }
 
 // ---------------------------------------------------------------------------

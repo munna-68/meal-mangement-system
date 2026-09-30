@@ -49,6 +49,12 @@ const importSchema = z.object({
   /** Fallback date for deposit rows that do not carry one. */
   date: optionalDate,
   rows: z.array(rowSchema).min(1, "Nothing to import").max(500, "Too many rows at once"),
+  /**
+   * One key per submission, reused until the paste succeeds. Every row carries
+   * the key plus its own position, so submitting the same paste twice — or
+   * double-clicking Import — cannot write the rows twice.
+   */
+  idempotencyKey: z.string().min(8).max(48).optional(),
 });
 
 export interface ImportIssue {
@@ -79,7 +85,7 @@ export async function bulkImportRows(
   const parsed = importSchema.safeParse(input);
   if (!parsed.success) return fail(firstIssue(parsed.error, "Could not read the pasted rows"));
 
-  const { kind, month, date: fallbackDate, rows } = parsed.data;
+  const { kind, month, date: fallbackDate, rows, idempotencyKey } = parsed.data;
 
   let openingError: string | null = null;
   if (kind === "opening") {
@@ -89,6 +95,10 @@ export async function bulkImportRows(
   }
 
   const members = await getMembersWithRooms();
+  const nameById = new Map(members.map((member) => [member.id, member.name]));
+  // Names, not ids: a skipped row has to be fixable by the manager reading the
+  // message, and an id means nothing to them.
+  const namesOf = (ids: string[]) => ids.map((id) => nameById.get(id) ?? id);
   const issues: ImportIssue[] = [];
   const resolved: Array<{ memberId: string; amount: number; date: string; notes: string; line: number }> = [];
 
@@ -100,8 +110,12 @@ export async function bulkImportRows(
         name: row.name,
         reason:
           match.reason === "ambiguous"
-            ? `matches ${match.candidates.length} members — add a room number`
-            : "no member with that name",
+            ? `${match.candidates.length} members have that name (${namesOf(
+                match.candidates,
+              )}) — add a room number to pick one`
+            : `no member is called "${row.name}" — the names in the mess are ${namesOf(
+                match.candidates,
+              )}`,
       });
       continue;
     }
@@ -138,14 +152,20 @@ export async function bulkImportRows(
   try {
     await db.transaction(async (tx) => {
       if (kind === "deposit") {
-        await tx.insert(deposits).values(
-          resolved.map((row) => ({
-            memberId: row.memberId,
-            date: row.date,
-            amount: row.amount,
-            notes: row.notes || null,
-          })),
-        );
+        // The unique index drops any row whose key has already been written, so a
+        // repeated submission inserts nothing rather than a second set of rows.
+        await tx
+          .insert(deposits)
+          .values(
+            resolved.map((row, index) => ({
+              memberId: row.memberId,
+              date: row.date,
+              amount: row.amount,
+              notes: row.notes || null,
+              idempotencyKey: idempotencyKey ? `${idempotencyKey}:${index}` : null,
+            })),
+          )
+          .onConflictDoNothing({ target: deposits.idempotencyKey });
       } else {
         await tx
           .insert(openingBalances)

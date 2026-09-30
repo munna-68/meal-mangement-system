@@ -37,6 +37,7 @@ import {
 } from "@/lib/defaults";
 import {
   currentMonthKey,
+  monthEnd,
   monthOf,
   monthStart,
   todayKey,
@@ -121,6 +122,20 @@ export async function getRooms(): Promise<RoomRow[]> {
     })
     .from(rooms)
     .orderBy(asc(rooms.number));
+}
+
+/** How many members were in the mess during `month`. */
+export async function countActiveMembersInMonth(month: string): Promise<number> {
+  const from = monthStart(month);
+  const to = monthEnd(month);
+  const rows = await db
+    .select({ joinDate: members.joinDate, leaveDate: members.leaveDate })
+    .from(members);
+  return rows.filter((row) => {
+    if (row.joinDate > to) return false;
+    if (row.leaveDate && row.leaveDate < from) return false;
+    return true;
+  }).length;
 }
 
 export async function getMembersWithRooms(): Promise<MemberWithRoom[]> {

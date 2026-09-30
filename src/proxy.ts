@@ -13,7 +13,10 @@ export async function proxy(request: NextRequest) {
   const session = await verifySessionToken(token);
 
   if (pathname === "/login") {
-    if (session) {
+    // `stale=1` means the server found the account missing or deactivated while
+    // the cookie itself still verifies. Redirecting to /today there would loop
+    // forever, so the sign-in form is shown instead.
+    if (session && request.nextUrl.searchParams.get("stale") !== "1") {
       return NextResponse.redirect(new URL("/today", request.url));
     }
     return NextResponse.next();

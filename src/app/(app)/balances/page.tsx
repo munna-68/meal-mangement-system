@@ -67,7 +67,14 @@ export default async function BalancesPage() {
     today: snapshot.today,
   });
 
-  const activeRows = result.rows.filter((row) => row.active);
+  // Every member is listed, including one who has since left: their share of the
+  // cost is still theirs, so hiding the row would quietly remove it from the
+  // column and leave the totals disagreeing with the sum of the rows above them.
+  // Left members are dimmed instead, and they appear in the PDF too.
+  const rows = result.rows;
+
+  const activeRows = rows.filter((row) => row.active);
+  const leftCount = rows.length - activeRows.length;
 
   // The opening figure comes from a manager-declared opening balance for the
   // first open month when one is set, and otherwise from the last closed
@@ -181,7 +188,7 @@ export default async function BalancesPage() {
               </tr>
             </thead>
             <tbody>
-              {activeRows.map((row) => {
+              {rows.map((row) => {
                 const negative = row.balance < 0;
                 return (
                   <tr
@@ -189,12 +196,16 @@ export default async function BalancesPage() {
                     className={cn(
                       "border-t",
                       negative && "bg-red-50/70 hover:bg-red-50",
+                      !row.active && "text-muted-foreground",
                     )}
                   >
                     <td className="px-3 py-2 tabular-nums">{row.roomNumber}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{row.memberName}</span>
+                        {!row.active ? (
+                          <Badge variant="secondary">Left</Badge>
+                        ) : null}
                         {negative ? (
                           <Badge
                             variant="destructive"
@@ -268,10 +279,13 @@ export default async function BalancesPage() {
       </SectionCard>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Meal costs accrue day by day. Khala, electricity, wifi and the Extra pool
-        are flat monthly amounts that also accrue day by day, so a member one day
-        into the month is not billed for the whole month — the full amount is
-        charged when the month is closed.{" "}
+        Meals and guest meals are counted day by day. Khala, electricity and wifi
+        are flat monthly charges: every member of a month pays the whole of them,
+        whoever joined late or left early, so these figures do not move during
+        the month and Balances always agrees with Settlement.
+        {leftCount > 0
+          ? ` ${leftCount} member${leftCount === 1 ? "" : "s"} who have left are still listed and still counted in the totals.`
+          : ""}{" "}
         <Link href="/settlement" className="underline">
           Close the month
         </Link>{" "}
@@ -296,7 +310,7 @@ export default async function BalancesPage() {
             periodStart={result.periodStart}
             periodEnd={result.periodEnd}
             generatedOn={today}
-            rows={activeRows.map((row) => ({
+            rows={rows.map((row) => ({
               memberId: row.memberId,
               roomNumber: row.roomNumber,
               memberName: row.memberName,
@@ -306,6 +320,7 @@ export default async function BalancesPage() {
               extraCost: row.extraCost,
               cost: row.cost,
               balance: row.balance,
+              active: row.active,
             }))}
             summary={result.summary}
           />

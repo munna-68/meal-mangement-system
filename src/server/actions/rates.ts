@@ -112,7 +112,18 @@ export async function updateRateCard(
 
   try {
     const [existing] = await db
-      .select({ effectiveFrom: rateCards.effectiveFrom, label: rateCards.label })
+      .select({
+        effectiveFrom: rateCards.effectiveFrom,
+        label: rateCards.label,
+        fullMealRate: rateCards.fullMealRate,
+        halfMealRate: rateCards.halfMealRate,
+        guestFullRate: rateCards.guestFullRate,
+        guestHalfRate: rateCards.guestHalfRate,
+        khalaNormalRate: rateCards.khalaNormalRate,
+        khalaSoloRate: rateCards.khalaSoloRate,
+        managerDailyFee: rateCards.managerDailyFee,
+        dailyExtraAmount: rateCards.dailyExtraAmount,
+      })
       .from(rateCards)
       .where(eq(rateCards.id, input.id))
       .limit(1);
@@ -152,10 +163,11 @@ export async function updateRateCard(
           entityType: "rate_card",
           entityId: input.id,
           summary: `Updated the rate card from ${data.effectiveFrom} — ${summariseRates(data)}`,
+          // The old rates as well as the new ones, so a month that was priced
+          // under the old card can still be reconstructed.
           detail: {
             ...data,
-            effectiveFrom: data.effectiveFrom,
-            previousEffectiveFrom: existing.effectiveFrom,
+            previous: existing,
           },
         },
         tx,

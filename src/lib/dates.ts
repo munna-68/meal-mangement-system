@@ -88,7 +88,11 @@ export function isValidDateKey(value: unknown): value is DateKey {
 }
 
 export function isValidMonthKey(value: unknown): value is MonthKey {
-  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
+  if (typeof value !== "string" || !/^\d{4}-\d{2}$/.test(value)) return false;
+  const month = Number(value.slice(5, 7));
+  // A bare regex accepts 2026-00 and 2026-13, which then reach the database and
+  // the month-name formatter as "undefined ২০২৬".
+  return month >= 1 && month <= 12;
 }
 
 export function addDays(key: DateKey, days: number): DateKey {

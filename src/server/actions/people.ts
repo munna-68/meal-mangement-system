@@ -224,6 +224,18 @@ export async function updateMember(
   if (!parsed.success) return fail(firstIssue(parsed.error, "Invalid member"));
   const data = parsed.data;
 
+  const [existing] = await db
+    .select({
+      name: members.name,
+      roomId: members.roomId,
+      active: members.active,
+      leaveDate: members.leaveDate,
+    })
+    .from(members)
+    .where(eq(members.id, input.id))
+    .limit(1);
+  if (!existing) return fail("That member no longer exists.");
+
   try {
     await db.transaction(async (tx) => {
       await tx
@@ -249,7 +261,22 @@ export async function updateMember(
           entityType: "member",
           entityId: input.id,
           summary: `Updated ${data.name.trim()}`,
-          detail: { roomId: data.roomId, active: data.active },
+          // Both the old and the new value: a room move re-prices who pays what,
+          // so the trail has to be able to say what it used to be.
+          detail: {
+            from: {
+              name: existing.name,
+              roomId: existing.roomId,
+              active: existing.active,
+              leaveDate: existing.leaveDate,
+            },
+            to: {
+              name: data.name.trim(),
+              roomId: data.roomId,
+              active: data.active,
+              leaveDate: data.active ? null : todayKey(),
+            },
+          },
         },
         tx,
       );

@@ -65,7 +65,14 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
   // closed, so the reason is shown before the user clicks rather than after.
   let closeBlock: string | null = null;
   if (!isClosed) {
-    if (laterClosedMonths.length > 0) {
+    if (month >= currentMonthKey()) {
+      // Closing a running month would freeze it part-way and lock out the rest
+      // of it, so the button is disabled with the reason shown up front.
+      closeBlock =
+        `${formatMonthLongDisplay(month)} is still running. Close it once the ` +
+        `month is over and every day has been confirmed — closing it now would ` +
+        `lock the days that have not happened yet.`;
+    } else if (laterClosedMonths.length > 0) {
       closeBlock =
         `${formatMonthLongDisplay(laterClosedMonths[0])} is already closed. Reopen it first — ` +
         `closing ${formatMonthLongDisplay(month)} now would leave it holding figures ` +
@@ -407,6 +414,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
             address={snapshot.settings.address}
             month={month}
             previousMonthLabel={`${formatBengaliMonth(addMonths(month, -1))} এর`}
+            isClosed={isClosed}
             rows={rows}
             ramadanMode={ramadanMode}
           />

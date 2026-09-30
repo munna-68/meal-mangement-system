@@ -57,8 +57,13 @@ export async function closeMonth(
   if (!parsed.success) return fail(firstIssue(parsed.error, "Invalid month"));
   const { month, notes } = parsed.data;
 
-  if (month > currentMonthKey()) {
-    return fail("You cannot close a month that has not finished yet.");
+  // A month can only be closed once it is over. Closing the current month would
+  // freeze two days of meals and then lock the month, making the rest of it
+  // un-billable until somebody noticed and reopened.
+  if (month >= currentMonthKey()) {
+    return fail(
+      "This month is still running. Close it after the last day of the month, once every day has been confirmed.",
+    );
   }
 
   try {

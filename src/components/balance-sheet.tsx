@@ -11,6 +11,8 @@ export interface BalanceSheetRow {
   memberId: string;
   roomNumber: string;
   memberName: string;
+  /** False for somebody who has left; their row is still listed and counted. */
+  active?: boolean;
   openingBalance: number;
   deposits: number;
   utilityCost: number;
@@ -146,7 +148,12 @@ export function BalanceSheet({
                 className={negative ? styles.deficit : undefined}
               >
                 <td className={styles.room}>{bn(row.roomNumber)}</td>
-                <td>{row.memberName}</td>
+                <td>
+                {row.memberName}
+                {row.active === false ? (
+                  <span className={styles.left}> (চলে গেছেন)</span>
+                ) : null}
+              </td>
                 <td className={styles.num}>{formatTakaBengali(row.openingBalance)}</td>
                 <td className={styles.num}>{formatTakaBengali(row.deposits)}</td>
                 <td className={styles.num}>{formatTakaBengali(row.utilityCost)}</td>

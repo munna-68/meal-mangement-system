@@ -7,12 +7,12 @@ import {
   SparklesIcon,
   TrashIcon,
   XIcon,
-  ZapIcon,
 } from "lucide-react";
 
 import { cn } from "cn";
 
 import { useAction } from "@/components/use-action";
+import { useIdempotencyKey } from "@/components/use-idempotency-key";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,19 +53,21 @@ export interface BillRecord {
   month: string;
   electricity: number | null;
   wifi: number | null;
+  /** Khala for the month, from the rate card — it is not entered by hand. */
   khala: number | null;
-  calculatedKhala: number;
-  hasSavedKhala: boolean;
 }
 
 export interface MonthCostPoolSummary {
   month: string;
   extrasPoolTotal: number;
-  extrasPerHead: number;
+  /** The lowest and highest share any single member carries. */
+  extrasPerHeadLow: number;
+  extrasPerHeadHigh: number;
   recurringTotal: number;
   manualTotal: number;
   utilityPoolTotal: number;
-  utilityPerHead: number;
+  utilityPerHeadLow: number;
+  utilityPerHeadHigh: number;
   boarderCount: number;
   mealDaysRan: number;
   dailyRate: number;
@@ -105,6 +107,7 @@ export function ExtrasClient({
   fixedSummaries: MonthlyFixedExtraSummary[];
 }) {
   const { run, pending } = useAction();
+  const idempotency = useIdempotencyKey();
   const [date, setDate] = useState(todayKey());
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
@@ -126,11 +129,6 @@ export function ExtrasClient({
   const [wifi, setWifi] = useState(
     initialBill?.wifi !== null && initialBill?.wifi !== undefined
       ? String(initialBill.wifi)
-      : "",
-  );
-  const [khala, setKhala] = useState(
-    initialBill?.hasSavedKhala && initialBill?.khala !== null && initialBill?.khala !== undefined
-      ? String(initialBill.khala)
       : "",
   );
 
@@ -180,7 +178,7 @@ export function ExtrasClient({
       items.push({
         id: `utility-khala-${bill.month}`,
         date: dateStr,
-        label: `Khala bill (${monthLabel})`,
+        label: `Khala for the month (${monthLabel})`,
         categoryLabel: "Utility pool",
         pool: "UTILITY",
         showInDailyBudget: false,
@@ -304,7 +302,11 @@ export function ExtrasClient({
                   </Badge>
                 </div>
                 <div className="mt-1 font-heading text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                  {formatTaka(currentPool.extrasPerHead)} / head
+                  {formatTaka(currentPool.extrasPerHeadLow)}
+                  {currentPool.extrasPerHeadHigh !== currentPool.extrasPerHeadLow
+                    ? `–${formatTaka(currentPool.extrasPerHeadHigh)}`
+                    : null}{" "}
+                  / member
                 </div>
                 <div className="text-xs text-emerald-700 dark:text-emerald-300">
                   total {formatTaka(currentPool.extrasPoolTotal)} across {currentPool.boarderCount} boarders
@@ -332,13 +334,17 @@ export function ExtrasClient({
                   </Badge>
                 </div>
                 <div className="mt-1 font-heading text-xl font-bold tabular-nums text-blue-700 dark:text-blue-400">
-                  {formatTaka(currentPool.utilityPerHead)} / head
+                  {formatTaka(currentPool.utilityPerHeadLow)}
+                  {currentPool.utilityPerHeadHigh !== currentPool.utilityPerHeadLow
+                    ? `–${formatTaka(currentPool.utilityPerHeadHigh)}`
+                    : null}{" "}
+                  / member
                 </div>
                 <div className="text-xs text-blue-700 dark:text-blue-300">
                   total {formatTaka(currentPool.utilityPoolTotal)} across {currentPool.boarderCount} boarders
                 </div>
                 <p className="mt-2 border-t border-blue-200/60 pt-2 text-[10px] text-blue-600/80 dark:border-blue-800/60 dark:text-blue-400/80">
-                  electricity + wifi + khala (room capacity split)
+                  electricity + wifi + Khala, split by room capacity. Quote a member their own row.
                 </p>
               </div>
 
@@ -438,12 +444,14 @@ export function ExtrasClient({
                   createExtra({
                     date,
                     label,
-                    amount: Number(amount),
+                    amount,
                     category,
                     showInDailyBudget,
+                    idempotencyKey: idempotency.current(),
                   }),
                 {
                   onSuccess: () => {
+                    idempotency.reset();
                     setLabel("");
                     setAmount("");
                     setShowInDailyBudget(false);
@@ -641,7 +649,7 @@ export function ExtrasClient({
           💡 <strong>Notice:</strong> Utility bills are charged once per month, not on a day.
           Enter the bill amounts for the month; they are apportioned across members according to room capacity and added to Settlement.
         </div>
-        <div className="grid gap-3 p-4 lg:grid-cols-[1.2fr_1fr_1fr_1fr_auto] lg:items-end">
+        <div className="grid gap-3 p-4 lg:grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] lg:items-end">
           <div className="flex flex-col gap-2">
             <Label htmlFor="bill-month">Month</Label>
             <Select
@@ -651,7 +659,6 @@ export function ExtrasClient({
                 const existing = bills.find((bill) => bill.month === value);
                 setElectricity(existing?.electricity !== null && existing?.electricity !== undefined ? String(existing.electricity) : "");
                 setWifi(existing?.wifi !== null && existing?.wifi !== undefined ? String(existing.wifi) : "");
-                setKhala(existing?.hasSavedKhala && existing?.khala !== null && existing?.khala !== undefined ? String(existing.khala) : "");
               }}
             >
               <SelectTrigger id="bill-month" className="w-full">
@@ -691,22 +698,11 @@ export function ExtrasClient({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="bill-khala">Khala</Label>
-            <Input
-              id="bill-khala"
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={khala}
-              placeholder={
-                selectedBill?.khala
-                  ? String(selectedBill.khala)
-                  : selectedBill?.calculatedKhala
-                    ? String(selectedBill.calculatedKhala)
-                    : "0"
-              }
-              onChange={(event) => setKhala(event.target.value)}
-            />
+            <Label>Khala</Label>
+            <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm tabular-nums text-muted-foreground">
+              {selectedBill?.khala ? formatTaka(selectedBill.khala) : "—"}
+              <span className="block text-[11px]">from the rate card</span>
+            </p>
           </div>
           <Button
             disabled={pending || !billMonth}
@@ -731,15 +727,6 @@ export function ExtrasClient({
                     }),
                   );
                 }
-                if (khala !== "") {
-                  tasks.push(
-                    saveUtilityBill({
-                      month: billMonth,
-                      type: "KHALA",
-                      amount: Number(khala),
-                    }),
-                  );
-                }
                 const results = await Promise.all(tasks);
                 const failed = results.find((r) => !r.ok);
                 if (failed) return failed;
@@ -756,7 +743,9 @@ export function ExtrasClient({
         <header className="border-b px-4 py-3">
           <h2 className="font-heading text-sm font-semibold">Utility bill records</h2>
           <p className="text-xs text-muted-foreground">
-            Monthly pool bills: Electricity, Wifi, and Khala (Khala+Wifi+Electricity).
+          Electricity and Wifi are entered here. Khala is not entered — it comes
+          from the rate card — and the last column is the whole
+          Khala+Wifi+Electricity pool for the month.
           </p>
         </header>
         <div className="overflow-x-auto">
@@ -789,21 +778,7 @@ export function ExtrasClient({
                       {bill.wifi === null ? "—" : formatTaka(bill.wifi)}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">
-                      {bill.khala === null ? (
-                        "—"
-                      ) : (
-                        <span>
-                          {formatTaka(bill.khala)}
-                          {!bill.hasSavedKhala && bill.calculatedKhala > 0 ? (
-                            <span
-                              className="ml-1 text-[10px] text-muted-foreground"
-                              title="Calculated from rate card and occupancy"
-                            >
-                              (auto)
-                            </span>
-                          ) : null}
-                        </span>
-                      )}
+                      {bill.khala === null ? "—" : formatTaka(bill.khala)}
                     </td>
                     <td className="px-4 py-2 text-right font-semibold tabular-nums">
                       {formatTaka(combined)}

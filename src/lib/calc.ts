@@ -10,7 +10,6 @@
 import {
   addDays,
   compare,
-  daysBetweenInclusive,
   daysInMonth,
   isSameOrAfter,
   isSameOrBefore,
@@ -198,50 +197,6 @@ export function isMemberActiveInRange(
   return true;
 }
 
-/** How many days of `month`, up to `cutoff`, the member was actually present. */
-export function memberAccruedDays(input: {
-  member: MemberData;
-  month: MonthKey;
-  cutoff: DateKey;
-  today?: DateKey;
-}): number {
-  const { member, month, cutoff, today = todayKey() } = input;
-  const windowStart = monthStart(month);
-  const monthLast = monthEnd(month);
-  const windowEnd = compare(cutoff, monthLast) < 0 ? cutoff : monthLast;
-  if (compare(windowStart, windowEnd) > 0) return 0;
-
-  const range = memberActiveRange(member, today);
-  const from = compare(range.from, windowStart) > 0 ? range.from : windowStart;
-  const to =
-    range.to && compare(range.to, windowEnd) < 0 ? range.to : windowEnd;
-  return daysBetweenInclusive(from, to);
-}
-
-/**
- * What fraction of a month's flat charges has accrued by `cutoff`.
- *
- * A finished month accrues in full (1). A month still in progress accrues by
- * the member's own days present over the length of the month, so somebody one
- * day into the month is billed for one day of Khala and utilities rather than
- * the whole month. The extra pool is *not* pro-rated here — it is built from
- * dated line items that are already bounded by `cutoff`.
- *
- * This is the *live* fraction. `computeMonth` bypasses it when `finalize` is
- * set, because a month being billed is charged in full.
- */
-export function flatChargeFraction(input: {
-  member: MemberData;
-  month: MonthKey;
-  cutoff: DateKey;
-  today?: DateKey;
-}): number {
-  if (compare(monthEnd(input.month), input.cutoff) <= 0) return 1;
-  const totalDays = daysInMonth(input.month).length;
-  if (totalDays === 0) return 0;
-  return memberAccruedDays(input) / totalDays;
-}
-
 // ---------------------------------------------------------------------------
 // Sticky meal status
 // ---------------------------------------------------------------------------
@@ -355,6 +310,29 @@ export interface DayTotalsInput {
 }
 
 /**
+ * How much of the manager's daily fee is held back from the bazar cash.
+ *
+ * The fee can never exceed what the day actually cost, so a very cheap day
+ * cannot produce a negative budget — a number nobody can hand over or read off a
+ * slip. Every screen that shows the day's budget reads this one function, so
+ * the figure on the slip, on the card and in the stored record always agree.
+ */
+export function managerFeeDeduction(input: {
+  fee: number;
+  hasActivity: boolean;
+  mealsSubtotal: number;
+  extraAmount: number;
+  deductionAmount?: number;
+}): number {
+  if (!input.hasActivity) return 0;
+  const available = Math.max(
+    0,
+    input.mealsSubtotal + input.extraAmount - (input.deductionAmount ?? 0),
+  );
+  return Math.min(input.fee, available);
+}
+
+/**
  * The day's budget: meal counts priced at the day's rate card, plus the extras
  * flagged for the daily budget, minus any deduction.
  */
@@ -438,8 +416,13 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
   const hasActivity =
     fullCount + halfCount + guestFullCount + guestHalfCount + sehriCount > 0 ||
     extraAmount > 0;
-  const managerFeeAmount =
-    rateCard && hasActivity ? (rateCard.managerDailyFee ?? 0) : 0;
+  const managerFeeAmount = managerFeeDeduction({
+    fee: rateCard?.managerDailyFee ?? 0,
+    hasActivity,
+    mealsSubtotal,
+    extraAmount,
+    deductionAmount,
+  });
   const totalBudget =
     mealsSubtotal + extraAmount - managerFeeAmount - deductionAmount;
 
@@ -828,11 +811,6 @@ export function apportionUtilities(input: {
   to: DateKey;
   soloElectricityMultiplier?: number;
   soloWifiMultiplier?: number;
-  /**
-   * Per-member fraction of the month that has elapsed, used to accrue these
-   * flat monthly bills day by day. Missing members accrue in full.
-   */
-  accrualFractionByMember?: Map<string, number>;
   today?: DateKey;
 }): UtilityApportionment {
   const {
@@ -843,7 +821,6 @@ export function apportionUtilities(input: {
     to,
     soloElectricityMultiplier = 2,
     soloWifiMultiplier = 1,
-    accrualFractionByMember,
     today = todayKey(),
   } = input;
   const month = monthOf(from);
@@ -887,11 +864,12 @@ export function apportionUtilities(input: {
   const fullElectricityShares = distributeTaka(totalElectricity, elecWeights);
   const fullWifiShares = distributeTaka(totalWifi, wifiWeights);
 
+  // These are flat monthly bills charged in full to every member of the month,
+  // so there is no per-member fraction to apply here.
   const byMember = new Map<string, UtilityShare>();
   activeMembers.forEach((member, i) => {
-    const fraction = accrualFractionByMember?.get(member.id) ?? 1;
-    const electricity = roundTaka(fullElectricityShares[i] * fraction);
-    const wifi = roundTaka(fullWifiShares[i] * fraction);
+    const electricity = fullElectricityShares[i];
+    const wifi = fullWifiShares[i];
     byMember.set(member.id, {
       electricity,
       wifi,
@@ -931,30 +909,37 @@ export function khalaAmountFor(input: {
 
 export interface ExtraPool {
   total: number;
+  /** Every member's own share. The shares always add back up to `total`. */
+  shares: Map<string, number>;
+  /** The lowest share, which is the only figure safe to quote as "per head". */
   perMember: number;
   memberCount: number;
 }
 
 /**
- * Every extra line item dated in the window is pooled and split evenly across
- * the members active in that window, so the monthly ledger shows one identical
- * "Extra" figure for everyone.
+ * Every extra line item dated in the window is pooled and split across the
+ * members active in that window.
+ *
+ * The split is by largest remainder, so every member's own share is handed to
+ * them and the shares add back up to the pool to the taka. Individual shares
+ * differ by at most one taka; there is no rounding fund and no created or lost
+ * money.
  *
  * NOTE (deliberate, do not "fix"): the manager's daily fee is a *separate*
  * line item that is added on top of the recurring daily Extra, not carved out
  * of it. Both are created by `server/auto-extras.ts` and both are summed here.
  * The mess owner confirmed the two figures are meant to be additive.
  *
- * The pool is also already accrued: it only contains line items dated on or
- * before `to`, so unlike Khala and the utility bills it needs no pro-rating.
+ * Unlike Khala and the utility bills, the pool is naturally bounded by `to`:
+ * it only contains line items dated on or before that day.
  */
 export function extraPoolForRange(input: {
   extras: ExtraItemData[];
   from: DateKey;
   to: DateKey;
-  activeMemberCount: number;
+  activeMemberIds: string[];
 }): ExtraPool {
-  const { extras, from, to, activeMemberCount } = input;
+  const { extras, from, to, activeMemberIds } = input;
   const total = sum(
     extras
       .filter(
@@ -967,9 +952,18 @@ export function extraPoolForRange(input: {
       )
       .map((item) => item.amount),
   );
-  const perMember =
-    activeMemberCount > 0 ? roundTaka(total / activeMemberCount) : 0;
-  return { total, perMember, memberCount: activeMemberCount };
+  const memberCount = activeMemberIds.length;
+  // Equal weights, split by largest remainder, so the members' shares always add
+  // back up to the pool exactly. Rounding the average instead would invent or
+  // lose taka every month the pool was not divisible by the head count.
+  const amounts = distributeTaka(
+    total,
+    activeMemberIds.map(() => 1),
+  );
+  const shares = new Map<string, number>();
+  activeMemberIds.forEach((id, index) => shares.set(id, amounts[index]));
+  const perMember = amounts.length > 0 ? Math.min(...amounts) : 0;
+  return { total, shares, perMember, memberCount };
 }
 
 export interface MonthlyFixedExtraSummary {
@@ -1069,14 +1063,11 @@ export interface MonthComputationInput {
   /** Compute only up to this date; defaults to the end of the month. */
   cutoff?: DateKey;
   /**
-   * Treat the month as finished even when `today` is still inside it, so the
-   * flat monthly charges are billed in full rather than accrued.
-   *
-   * Set this when producing a month's *bill* — closing a month, and the
-   * settlement preview that shows what closing would store. Leave it off for
-   * the live position, which is what `computeRunningBalances` wants: a member
-   * three days into a month has accrued three days of Khala, but the month they
-   * close will bill the whole monthly fee.
+   * Says "this is the month's bill" rather than "this is where the mess is
+   * today". It no longer changes a single figure: the flat monthly charges are
+   * charged in full either way (see the comment in `computeMonth`) and meals stop
+   * at `today` in both cases, because a day that has not happened cannot be
+   * billed. Kept so a caller can still be explicit about which it wants.
    */
   finalize?: boolean;
   members: MemberData[];
@@ -1101,7 +1092,6 @@ export interface MonthComputationInput {
 export function computeMonth(input: MonthComputationInput): MonthComputation {
   const {
     month,
-    finalize = false,
     members,
     rooms,
     changes,
@@ -1128,20 +1118,16 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
   );
   const activeMemberIds = activeMembers.map((member) => member.id);
 
-  // Flat monthly charges (Khala, electricity, wifi) accrue day by day, so a
-  // member one day into the month is not billed for the whole month. A finished
-  // month always accrues in full, and `finalize` forces that for a month that is
-  // being billed before its last day — closing a month must charge the whole
-  // monthly fee, not the part that has elapsed so far.
-  const monthComplete = finalize || compare(lastDay, cutoff) <= 0;
-  const accrualFractionByMember = new Map<string, number>();
-  for (const member of activeMembers) {
-    accrualFractionByMember.set(
-      member.id,
-      monthComplete ? 1 : flatChargeFraction({ member, month, cutoff, today }),
-    );
-  }
-
+  // The mess's rule: Khala, electricity and wifi are flat monthly charges, so
+  // every member of the month pays the whole of them at the per-head average.
+  // Nobody is pro-rated by days present — somebody who joins on the 20th, or
+  // leaves on the 3rd, still carries a full month, exactly as on paper — and the
+  // figures therefore do not move during the month, so a live balance and a
+  // closed month can never disagree about them.
+  //
+  // Meals and guest meals are still counted day by day; only these three charges
+  // are flat. So `finalize` no longer changes a single figure — it is kept only
+  // so a caller can still say "this is the month's bill".
   const timeline = resolveStatusTimeline(
     changes,
     activeMemberIds,
@@ -1215,43 +1201,26 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     to: cutoff,
     soloElectricityMultiplier,
     soloWifiMultiplier,
-    accrualFractionByMember,
     today,
   });
   const extraPool = extraPoolForRange({
     extras,
     from,
     to: cutoff,
-    activeMemberCount: activeMembers.length,
+    activeMemberIds: activeMembers.map((member) => member.id),
   });
 
-  // Khala is a flat monthly charge. If an explicit monthly khala bill was saved
-  // in utility bills, apportion it using each member's room capacity weight;
-  // otherwise calculate directly from the rate card in force for that month.
-  const khalaBill = bills.find((b) => b.month === month && b.type === "KHALA");
+  // Khala comes from the rate card and nothing else: the normal rate, or the
+  // solo rate for somebody alone in a multi-bed room. It is deliberately *not*
+  // driven by a saved Khala bill, so entering one can never quietly change the
+  // rate the mess charges.
   const monthCard = rateCardFor(rateCards, from);
   const khalaByMember = new Map<string, number>();
-
-  if (khalaBill && khalaBill.amount > 0) {
-    const weights = new Map<string, number>();
-    for (const member of activeMembers) {
-      weights.set(
-        member.id,
-        khalaAmountFor({ member, occupancy, rateCard: monthCard }),
-      );
-    }
-    const memberWeights = activeMembers.map((m) => weights.get(m.id) ?? 0);
-    const fullKhalaShares = distributeTaka(khalaBill.amount, memberWeights);
-    activeMembers.forEach((member, i) => {
-      const fraction = accrualFractionByMember.get(member.id) ?? 1;
-      khalaByMember.set(member.id, roundTaka(fullKhalaShares[i] * fraction));
-    });
-  } else {
-    for (const member of activeMembers) {
-      const flat = khalaAmountFor({ member, occupancy, rateCard: monthCard });
-      const fraction = accrualFractionByMember.get(member.id) ?? 1;
-      khalaByMember.set(member.id, roundTaka(flat * fraction));
-    }
+  for (const member of activeMembers) {
+    khalaByMember.set(
+      member.id,
+      khalaAmountFor({ member, occupancy, rateCard: monthCard }),
+    );
   }
 
   for (const member of activeMembers) {
@@ -1265,7 +1234,7 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     row.wifiAmount = utility.wifi;
     row.khalaAmount = khalaByMember.get(member.id) ?? 0;
     row.khalaElecWifiAmount = row.khalaAmount + utility.total;
-    row.extraAmount = extraPool.perMember;
+    row.extraAmount = extraPool.shares.get(member.id) ?? 0;
     row.totalCost =
       row.mealAmount + row.khalaElecWifiAmount + row.extraAmount;
   }

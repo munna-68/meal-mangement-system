@@ -144,6 +144,12 @@
   font-weight: 700;
 }
 
+.table .left {
+  font-size: 10px;
+  color: #555555;
+  font-weight: 400;
+}
+
 .table tr.totalRow td {
   background: #ececec;
   font-weight: 700;

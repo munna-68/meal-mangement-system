@@ -4,6 +4,7 @@ import { DateNav } from "@/components/date-nav";
 import { PageHeader, Stat } from "@/components/page-header";
 import {
   computeDayTotals,
+  managerFeeDeduction,
   rateCardFor,
   roomBreakdownForDay,
 } from "@/lib/calc";
@@ -84,14 +85,23 @@ export default async function TodayPage(props: PageProps<"/today">) {
       0 ||
     budgetExtraAmount > 0 ||
     pendingRecurringAmount > 0;
-  const managerFeeDeduction = hasActivity ? (rateCard?.managerDailyFee ?? 0) : 0;
+  const deductionAmount = record?.deductionAmount ?? 0;
+  // The one function the engine uses, so this card, the slip and the stored
+  // record can never show three different budgets for the same day.
+  const feeDeduction = managerFeeDeduction({
+    fee: rateCard?.managerDailyFee ?? 0,
+    hasActivity,
+    mealsSubtotal: totals.mealsSubtotal,
+    extraAmount: budgetExtraAmount + pendingRecurringAmount,
+    deductionAmount,
+  });
 
   const budgetTotal =
     totals.mealsSubtotal +
     budgetExtraAmount +
     pendingRecurringAmount -
-    managerFeeDeduction -
-    (record?.deductionAmount ?? 0);
+    feeDeduction -
+    deductionAmount;
 
   return (
     <>

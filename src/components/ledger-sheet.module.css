@@ -69,6 +69,10 @@
 .name {
   text-align: left !important;
   font-weight: 600;
+  /* A long name must not widen the column and shrink the whole sheet. */
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .numeric {

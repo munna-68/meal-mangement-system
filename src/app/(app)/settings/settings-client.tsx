@@ -108,10 +108,12 @@ export function SettingsClient({
           Solo member utility share
         </h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Electricity and wi-fi are split evenly across every active member. A
-          member alone in a multi-bed room can be charged a multiple of that
-          share — set the multiple to 1 to charge them the same as everyone
-          else.
+          Electricity and wi-fi are split by <strong>room capacity</strong>, not
+          evenly per head: a member alone in a multi-bed room carries the whole
+          room, so they are charged a multiple of the ordinary share. The bill is
+          divided with largest remainder, so the shares always add back up to the
+          bill exactly. Set a multiple to 1 to charge a solo member the same as
+          everyone else.
         </p>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -159,7 +161,9 @@ export function SettingsClient({
         <Alert className="mt-3">
           <AlertDescription className="text-xs">
             The Khala (maid) rate for a solo member is separate — set it as the
-            &ldquo;Khala solo rate&rdquo; on the Rate Card.
+            &ldquo;Khala solo rate&rdquo; on the Rate Card. Khala always comes
+            from the rate card; there is no Khala bill to enter, so nothing on
+            this screen can change it by accident.
           </AlertDescription>
         </Alert>
       </section>

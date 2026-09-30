@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { z } from "zod";
 
@@ -9,6 +9,8 @@ import {
   bazarDuties,
   bazarDutyRooms,
   dailyBazarRecords,
+  extraLineItems,
+  members,
   rooms,
 } from "@/db/schema";
 import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
@@ -114,14 +116,17 @@ export async function autoAssignRoster(
   }
 
   try {
-    const roomRows = await db
-      .select({ id: rooms.id, capacity: rooms.capacity })
+    // Only rooms that somebody actually lives in take a turn. An empty room in
+    // the rotation means a day of shopping is assigned to nobody.
+    const occupiedRooms = await db
+      .selectDistinct({ id: rooms.id, capacity: rooms.capacity, number: rooms.number })
       .from(rooms)
+      .innerJoin(members, eq(members.roomId, rooms.id))
       .orderBy(rooms.number);
 
-    if (roomRows.length === 0) return fail("Add some rooms first.");
+    if (occupiedRooms.length === 0) return fail("Add some members first.");
 
-    const units = buildDutyUnits(roomRows);
+    const units = buildDutyUnits(occupiedRooms);
     if (units.length === 0) return fail("No rooms can take a duty.");
 
     const ordered = orderUnitsFrom(units, startRoomId);
@@ -388,6 +393,72 @@ export async function saveBazarRecordForm(
     menuMorning: str("menuMorning"),
     menuNoon: str("menuNoon"),
   });
+}
+
+/**
+ * Undoes a confirmation: the day stops being a bazar day.
+ *
+ * The record is deleted and the recurring daily Extra and manager's fee that
+ * were generated for it are deleted with it, so the day stops counting towards
+ * "meal days ran" and its costs leave the month pool. Refused once the month is
+ * closed, like every other write.
+ */
+export async function unconfirmBazarDay(date: string): Promise<ActionResult> {
+  const actor = await requireSession();
+  if (!isValidDateKey(date)) return fail("Invalid date");
+
+  const locked = await monthLockError([date]);
+  if (locked) return fail(locked);
+
+  try {
+    const removed = await db.transaction(async (tx) => {
+      const [record] = await tx
+        .select({ totalBudget: dailyBazarRecords.totalBudget })
+        .from(dailyBazarRecords)
+        .where(eq(dailyBazarRecords.date, date))
+        .limit(1);
+      if (!record) return null;
+
+      await tx.delete(dailyBazarRecords).where(eq(dailyBazarRecords.date, date));
+      // Only the auto-generated rows for this day; anything a manager entered by
+      // hand stays exactly where it is.
+      const deletedRows = await tx
+        .delete(extraLineItems)
+        .where(
+          and(
+            eq(extraLineItems.date, date),
+            eq(extraLineItems.isAuto, true),
+          ),
+        )
+        .returning({ id: extraLineItems.id, label: extraLineItems.label });
+
+      await recordAudit(
+        {
+          actor,
+          action: "bazar.unconfirm",
+          entityType: "bazar_day",
+          entityId: date,
+          summary: `Un-confirmed the bazar for ${date} — removed the record and ${
+            deletedRows.length
+          } recurring cost row${deletedRows.length === 1 ? "" : "s"}`,
+          detail: {
+            date,
+            totalBudget: record.totalBudget,
+            removedRecurringRows: deletedRows.map((row) => row.label),
+          },
+        },
+        tx,
+      );
+      return record;
+    });
+
+    if (!removed) return fail("That day has no confirmed bazar to remove.");
+  } catch (error) {
+    return fail(firstIssue(error, "Could not un-confirm the bazar day"));
+  }
+
+  refresh();
+  return ok(`${date} is no longer a bazar day`);
 }
 
 /** Turns the recurring daily Extra or the manager's fee off for a single day. */

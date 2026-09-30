@@ -6,24 +6,38 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { deposits, extraLineItems, utilityBills } from "@/db/schema";
-import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
-import { isValidDateKey, isValidMonthKey, monthOf, monthStart } from "@/lib/dates";
+import {
+  fail,
+  firstIssue,
+  ok,
+  takaAmount,
+  type ActionResult,
+} from "@/lib/action-result";
+import {
+  formatMonthLongDisplay,
+  isValidDateKey,
+  isValidMonthKey,
+  monthOf,
+  monthStart,
+} from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { recordAudit } from "@/server/audit";
 import { monthKeyLockError, monthLockError } from "@/server/month-lock";
-import { getMemberNames } from "@/server/queries";
+import { countActiveMembersInMonth, getMemberNames } from "@/server/queries";
 
 const extraSchema = z.object({
   date: z.string().refine(isValidDateKey, "Pick a valid date"),
   label: z.string().trim().min(1, "Give the item a label").max(120),
-  amount: z.coerce.number().int().min(0, "Amount cannot be negative"),
+  amount: takaAmount(1),
   category: z.enum(["RECURRING_DAILY", "ONE_OFF", "MANAGER_FEE", "FEAST", "OTHER"]),
   showInDailyBudget: z.boolean().default(false),
+  /** Generated once per submission so a double-click cannot add it twice. */
+  idempotencyKey: z.string().max(64).optional(),
 });
 
 export async function createExtra(
-  input: z.infer<typeof extraSchema>,
+  input: z.input<typeof extraSchema>,
 ): Promise<ActionResult> {
   const actor = await requireSession();
   const parsed = extraSchema.safeParse(input);
@@ -32,13 +46,23 @@ export async function createExtra(
   const locked = await monthLockError([parsed.data.date]);
   if (locked) return fail(locked);
 
+  const { idempotencyKey, ...values } = parsed.data;
   try {
-    await db.transaction(async (tx) => {
-      await tx.insert(extraLineItems).values({
-        ...parsed.data,
-        label: parsed.data.label.trim(),
-        isAuto: false,
-      });
+    const created = await db.transaction(async (tx) => {
+      // A manual item is identified by the key the browser sent with the form,
+      // so the same submission can only ever be written once.
+      const inserted = await tx
+        .insert(extraLineItems)
+        .values({
+          ...values,
+          label: values.label.trim(),
+          isAuto: false,
+          sourceKey: idempotencyKey ? `manual:${idempotencyKey}` : null,
+        })
+        .onConflictDoNothing({ target: extraLineItems.sourceKey })
+        .returning({ id: extraLineItems.id });
+
+      if (inserted.length === 0) return false;
 
       await recordAudit(
         {
@@ -46,14 +70,16 @@ export async function createExtra(
           action: "extra.create",
           entityType: "extra",
           entityId: parsed.data.date,
-          summary: `Added extra "${parsed.data.label.trim()}" of ${formatTaka(
-            parsed.data.amount,
+          summary: `Added extra "${values.label.trim()}" of ${formatTaka(
+            values.amount,
           )} on ${parsed.data.date}`,
-          detail: { ...parsed.data },
+          detail: { ...values },
         },
         tx,
       );
+      return true;
     });
+    if (!created) return ok("That extra item was already added");
   } catch (error) {
     return fail(firstIssue(error, "Could not save the extra item"));
   }
@@ -62,7 +88,7 @@ export async function createExtra(
 }
 
 export async function updateExtra(
-  input: z.infer<typeof extraSchema> & { id: string },
+  input: z.input<typeof extraSchema> & { id: string },
 ): Promise<ActionResult> {
   const actor = await requireSession();
   const parsed = extraSchema.safeParse(input);
@@ -72,7 +98,14 @@ export async function updateExtra(
     // An edit can move an item between months, so both the old and the new
     // month have to be open.
     const [existing] = await db
-      .select({ date: extraLineItems.date, isAuto: extraLineItems.isAuto })
+      .select({
+        date: extraLineItems.date,
+        amount: extraLineItems.amount,
+        label: extraLineItems.label,
+        category: extraLineItems.category,
+        showInDailyBudget: extraLineItems.showInDailyBudget,
+        isAuto: extraLineItems.isAuto,
+      })
       .from(extraLineItems)
       .where(eq(extraLineItems.id, input.id))
       .limit(1);
@@ -108,7 +141,18 @@ export async function updateExtra(
           summary: `Updated extra "${parsed.data.label.trim()}" to ${formatTaka(
             parsed.data.amount,
           )} on ${parsed.data.date}`,
-          detail: { from: existing.date, to: parsed.data.date, amount: parsed.data.amount },
+          // Both the old and the new value, so a past month can still be
+          // reconstructed from the trail.
+          detail: {
+            from: existing,
+            to: {
+              date: parsed.data.date,
+              amount: parsed.data.amount,
+              label: parsed.data.label.trim(),
+              category: parsed.data.category,
+              showInDailyBudget: parsed.data.showInDailyBudget,
+            },
+          },
         },
         tx,
       );
@@ -170,12 +214,12 @@ export async function deleteExtra(id: string): Promise<ActionResult> {
 
 const billSchema = z.object({
   month: z.string().refine(isValidMonthKey, "Pick a month"),
-  type: z.enum(["ELECTRICITY", "WIFI", "KHALA"]),
-  amount: z.coerce.number().int().min(0, "Amount cannot be negative"),
+  type: z.enum(["ELECTRICITY", "WIFI"]),
+  amount: takaAmount(0),
 });
 
 export async function saveUtilityBill(
-  input: z.infer<typeof billSchema>,
+  input: z.input<typeof billSchema>,
 ): Promise<ActionResult> {
   const actor = await requireSession();
   const parsed = billSchema.safeParse(input);
@@ -184,9 +228,33 @@ export async function saveUtilityBill(
   const locked = await monthKeyLockError(parsed.data.month);
   if (locked) return fail(locked);
 
+  // A bill for a month nobody lived in would be shown on the Extras page and
+  // then charged to nobody — it would vanish. Say so instead of accepting it.
+  if (parsed.data.amount > 0) {
+    const activeCount = await countActiveMembersInMonth(parsed.data.month);
+    if (activeCount === 0) {
+      return fail(
+        `No member was in the mess during ${formatMonthLongDisplay(
+          parsed.data.month,
+        )}, so this bill would be charged to nobody. Check the members' join and leave dates first.`,
+      );
+    }
+  }
+
   const month = monthStart(parsed.data.month);
   try {
     await db.transaction(async (tx) => {
+      const [before] = await tx
+        .select({ amount: utilityBills.amount })
+        .from(utilityBills)
+        .where(
+          and(
+            eq(utilityBills.month, month),
+            eq(utilityBills.type, parsed.data.type),
+          ),
+        )
+        .limit(1);
+
       await tx
         .insert(utilityBills)
         .values({ month, type: parsed.data.type, amount: parsed.data.amount })
@@ -204,7 +272,12 @@ export async function saveUtilityBill(
           summary: `Set ${parsed.data.type.toLowerCase()} bill for ${
             parsed.data.month
           } to ${formatTaka(parsed.data.amount)}`,
-          detail: { month: parsed.data.month, type: parsed.data.type, amount: parsed.data.amount },
+          detail: {
+            month: parsed.data.month,
+            type: parsed.data.type,
+            from: before?.amount ?? null,
+            to: parsed.data.amount,
+          },
         },
         tx,
       );
@@ -259,12 +332,17 @@ export async function deleteUtilityBill(input: {
 const depositSchema = z.object({
   memberId: z.string().min(1, "Pick a member"),
   date: z.string().refine(isValidDateKey, "Pick a valid date"),
-  amount: z.coerce.number().int().min(0, "Amount cannot be negative"),
+  amount: takaAmount(0),
   notes: z.string().max(300).optional(),
+  /**
+   * Generated once per submission in the browser and reused until the save
+   * succeeds, so a double-click cannot record the deposit twice.
+   */
+  idempotencyKey: z.string().max(64).optional(),
 });
 
 export async function createDeposit(
-  input: z.infer<typeof depositSchema>,
+  input: z.input<typeof depositSchema>,
 ): Promise<ActionResult> {
   const actor = await requireSession();
   const parsed = depositSchema.safeParse(input);
@@ -278,13 +356,22 @@ export async function createDeposit(
     const names = await getMemberNames([parsed.data.memberId]);
     const memberName = names.get(parsed.data.memberId) ?? parsed.data.memberId;
 
+    const { idempotencyKey, ...values } = parsed.data;
+
     await db.transaction(async (tx) => {
-      await tx.insert(deposits).values({
-        memberId: parsed.data.memberId,
-        date: parsed.data.date,
-        amount: parsed.data.amount,
-        notes: parsed.data.notes?.trim() || null,
-      });
+      // The unique index on `idempotency_key` means the second of two clicks
+      // that raced each other simply inserts nothing.
+      const inserted = await tx
+        .insert(deposits)
+        .values({
+          ...values,
+          notes: values.notes?.trim() || null,
+          idempotencyKey: idempotencyKey || null,
+        })
+        .onConflictDoNothing({ target: deposits.idempotencyKey })
+        .returning({ id: deposits.id });
+
+      if (inserted.length === 0) return;
 
       await recordAudit(
         {

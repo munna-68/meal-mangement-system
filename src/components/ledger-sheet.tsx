@@ -34,6 +34,7 @@ export function LedgerSheet({
   address,
   month,
   previousMonthLabel,
+  isClosed = false,
   rows,
   ramadanMode,
 }: {
@@ -41,6 +42,8 @@ export function LedgerSheet({
   address: string;
   month: MonthKey;
   previousMonthLabel: string;
+  /** Whether the month has been closed, which changes what the opening column is. */
+  isClosed?: boolean;
   rows: LedgerRowView[];
   ramadanMode: boolean;
 }) {
@@ -96,7 +99,7 @@ export function LedgerSheet({
               <br />
               খরচ
             </th>
-            <th>
+            <th title="আগের মাসের শেষ দিনের ব্যালেন্স — এই মাসের শুরুর ব্যালেন্স">
               {previousMonthLabel}
               <br />
               জমা
@@ -167,6 +170,11 @@ export function LedgerSheet({
       </div>
       <div className={styles.legend}>
         ঋণাত্মক (লাল) সংখ্যা মানে সদস্যের জমা খরচের চেয়ে কম — টাকা বাকি আছে।
+      </div>
+      <div className={styles.legend}>
+        {isClosed
+          ? `${previousMonthLabel} জমা = আগের মাসের শেষ দিনের ব্যালেন্স (বন্ধ মাস থেকে আনা)।`
+          : `${previousMonthLabel} জমা = এই মাসের শুরুর ব্যালেন্স; মাস এখনো চলছে, তাই এটি ক্যারি-ফরওয়ার্ড নয় — খালা/বিদ্যুৎ/ওয়াইফাই সাধারণ মাসিক খরচ, দিন অনুযায়ী ভাগ হয় না।`}
       </div>
     </div>
   );

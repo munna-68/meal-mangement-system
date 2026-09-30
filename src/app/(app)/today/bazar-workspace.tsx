@@ -8,11 +8,13 @@ import {
   ArrowRightIcon,
   CheckCircle2Icon,
   InfoIcon,
+  Undo2Icon,
 } from "lucide-react";
 
 import { cn } from "cn";
 
 import { BazarSlip } from "@/components/bazar-slip";
+import { useAction } from "@/components/use-action";
 import { MealStatusLegend } from "@/components/meal-status";
 import { PdfButton } from "@/components/pdf-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -22,13 +24,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { ActionResult } from "@/lib/action-result";
 import type { DayTotals, ExtraCategory, RoomDayRow } from "@/lib/calc";
-import { EXTRA_CATEGORY_LABELS } from "@/lib/calc";
+import { EXTRA_CATEGORY_LABELS, managerFeeDeduction } from "@/lib/calc";
 import { todayKey } from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
 import {
   saveBazarRecord,
   saveBazarRecordForm,
   toggleAutoExtra,
+  unconfirmBazarDay,
 } from "@/server/actions/bazar";
 
 export interface WorkspaceExtra {
@@ -82,6 +85,7 @@ export function BazarWorkspace({
   );
   const [, startTransition] = useTransition();
   const router = useRouter();
+  const { run } = useAction();
 
   const [optimisticExtras, applyExtraPatch] = useOptimistic(
     extras,
@@ -142,11 +146,17 @@ export function BazarWorkspace({
       totals.sehriCount >
       0 ||
     displayExtraAmount > 0;
-  const managerFeeDeduction =
-    hasActivity && totals.rateCard ? (totals.rateCard.managerDailyFee ?? 0) : 0;
+  // The engine's own rule, so the workspace, the slip and the stored record
+  // cannot drift apart.
+  const managerFee = managerFeeDeduction({
+    fee: totals.rateCard?.managerDailyFee ?? 0,
+    hasActivity,
+    mealsSubtotal: totals.mealsSubtotal,
+    extraAmount: displayExtraAmount,
+    deductionAmount: deduction,
+  });
 
-  const totalBudget =
-    totals.mealsSubtotal + displayExtraAmount - managerFeeDeduction - deduction;
+  const totalBudget = totals.mealsSubtotal + displayExtraAmount - managerFee - deduction;
   const changeReturned = advance - totalBudget;
   const isFuture = date > todayKey();
 
@@ -287,11 +297,11 @@ export function BazarWorkspace({
           ) : (
             <Line label="Extra" detail="nothing flagged for today" amount={0} />
           )}
-          {managerFeeDeduction > 0 ? (
+          {managerFee > 0 ? (
             <Line
               label="Manager fee"
               detail="Held back from bazar cash"
-              amount={-managerFeeDeduction}
+              amount={-managerFee}
               negative
             />
           ) : null}
@@ -594,6 +604,29 @@ export function BazarWorkspace({
             beforeExport={isFuture ? undefined : confirmThenExport}
           />
         </div>
+        {isConfirmed && !isFuture ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={saving}
+            onClick={() =>
+              run(() => unconfirmBazarDay(date), {
+                successMessage: `${date} is no longer a bazar day`,
+              })
+            }
+          >
+            <Undo2Icon />
+            Un-confirm this day
+          </Button>
+        ) : null}
+        {isConfirmed && !isFuture ? (
+          <p className="text-xs text-muted-foreground">
+            Confirmed by mistake? Un-confirming deletes the record and the
+            recurring costs that came with it, so the day stops counting towards
+            the month&rsquo;s running days.
+          </p>
+        ) : null}
         {isFuture ? (
           <p className="text-xs text-muted-foreground">
             You cannot record a bazar for a future date.
@@ -672,6 +705,7 @@ export function BazarWorkspace({
               ...totals,
               extraItems: displayExtraItems,
               extraAmount: displayExtraAmount,
+              managerFeeAmount: managerFee,
               totalBudget,
               deductionAmount: deduction,
             }}

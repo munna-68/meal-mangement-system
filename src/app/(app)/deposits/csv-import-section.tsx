@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/textarea";
 import { aiBookPrompt, parseCsvImport, resolveMember } from "@/lib/import-csv";
 import { formatTaka } from "@/lib/money";
+import { useIdempotencyKey } from "@/components/use-idempotency-key";
 import { bulkImportRows } from "@/server/actions/import";
 import type { ImportIssue } from "@/server/actions/import";
 
@@ -47,6 +48,7 @@ export function CsvImportSection({
   const [month, setMonth] = useState(openMonth);
   const [issues, setIssues] = useState<ImportIssue[]>([]);
   const [pending, startTransition] = useTransition();
+  const idempotency = useIdempotencyKey();
 
   const parsed = useMemo(() => parseCsvImport(pasted), [pasted]);
 
@@ -106,8 +108,10 @@ export function CsvImportSection({
           date: entry.row.date ?? "",
           notes: entry.row.notes,
         })),
+        idempotencyKey: idempotency.current(),
       });
       if (result.ok) {
+        idempotency.reset();
         toast.success(result.message ?? "Imported");
         setPasted("");
         setIssues(result.issues ?? []);

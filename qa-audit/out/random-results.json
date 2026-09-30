@@ -1,0 +1,2002 @@
+{
+  "count": 500,
+  "startSeed": 1,
+  "totalChecks": 95265,
+  "scenariosWithFailures": 355,
+  "totalFailures": 2290,
+  "byInvariant": {
+    "I2": {
+      "title": "Σ member extras shares = Extras pool total exactly",
+      "fail": 588,
+      "samples": [
+        {
+          "scenarioId": "seed-1-edge",
+          "seed": 1,
+          "month": "2026-06",
+          "invariant": "I2",
+          "detail": "Σ extras shares vs pool total (3 members, pool 34004200)",
+          "expected": "34004200",
+          "actual": "34004199",
+          "delta": 1
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-03",
+          "invariant": "I2",
+          "detail": "Σ extras shares vs pool total (8 members, pool 38005100)",
+          "expected": "38005100",
+          "actual": "38005104",
+          "delta": -4
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-04",
+          "invariant": "I2",
+          "detail": "Σ extras shares vs pool total (18 members, pool 1004500)",
+          "expected": "1004500",
+          "actual": "1004508",
+          "delta": -8
+        }
+      ]
+    },
+    "R2": {
+      "title": "reference cross-check: app extras share = reference extras share",
+      "fail": 540,
+      "samples": [
+        {
+          "scenarioId": "seed-1-edge",
+          "seed": 1,
+          "month": "2026-06",
+          "invariant": "R2",
+          "detail": "app Σ extras shares vs reference (largest-remainder) Σ",
+          "expected": "34004200",
+          "actual": "34004199",
+          "delta": 1
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-03",
+          "invariant": "R2",
+          "detail": "app Σ extras shares vs reference (largest-remainder) Σ",
+          "expected": "38005100",
+          "actual": "38005104",
+          "delta": -4
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-04",
+          "invariant": "R2",
+          "detail": "app Σ extras shares vs reference (largest-remainder) Σ",
+          "expected": "1004500",
+          "actual": "1004508",
+          "delta": -8
+        }
+      ]
+    },
+    "R4": {
+      "title": "reference cross-check: app total cost = reference total cost",
+      "fail": 540,
+      "samples": [
+        {
+          "scenarioId": "seed-1-edge",
+          "seed": 1,
+          "month": "2026-06",
+          "invariant": "R4",
+          "detail": "app total cost vs reference total cost",
+          "expected": "34007744",
+          "actual": "34007743",
+          "delta": 1
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-03",
+          "invariant": "R4",
+          "detail": "app total cost vs reference total cost",
+          "expected": "38008107",
+          "actual": "38008111",
+          "delta": -4
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-04",
+          "invariant": "R4",
+          "detail": "app total cost vs reference total cost",
+          "expected": "1013390",
+          "actual": "1013398",
+          "delta": -8
+        }
+      ]
+    },
+    "R5": {
+      "title": "reference cross-check: app balance = reference balance",
+      "fail": 540,
+      "samples": [
+        {
+          "scenarioId": "seed-1-edge",
+          "seed": 1,
+          "month": "2026-06",
+          "invariant": "R5",
+          "detail": "app balance vs reference: Member 1: ref -11336829 vs app -11336828",
+          "expected": "0",
+          "actual": "1",
+          "delta": -1
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-03",
+          "invariant": "R5",
+          "detail": "app balance vs reference: VerylongmembernameVerylongmembernameVerylongmembername27: ref -4750938 vs app -4750939",
+          "expected": "0",
+          "actual": "4",
+          "delta": -4
+        },
+        {
+          "scenarioId": "seed-5",
+          "seed": 5,
+          "month": "2026-04",
+          "invariant": "R5",
+          "detail": "app balance vs reference: Member 23: ref -56105 vs app -56106",
+          "expected": "0",
+          "actual": "8",
+          "delta": -8
+        }
+      ]
+    },
+    "I3": {
+      "title": "Σ member utility shares = Utility pool total exactly",
+      "fail": 41,
+      "samples": [
+        {
+          "scenarioId": "seed-56",
+          "seed": 56,
+          "month": "2024-08",
+          "invariant": "I3",
+          "detail": "Σ utility shares vs pool (elec 11343 + wifi 0 + khala 0)",
+          "expected": "11343",
+          "actual": "0",
+          "delta": 11343
+        },
+        {
+          "scenarioId": "seed-91-edge",
+          "seed": 91,
+          "month": "2026-11",
+          "invariant": "I3",
+          "detail": "Σ utility shares vs pool (elec 11986 + wifi 0 + khala 0)",
+          "expected": "11986",
+          "actual": "0",
+          "delta": 11986
+        },
+        {
+          "scenarioId": "seed-93",
+          "seed": 93,
+          "month": "2025-07",
+          "invariant": "I3",
+          "detail": "Σ utility shares vs pool (elec 10719 + wifi 30 + khala 0)",
+          "expected": "10749",
+          "actual": "0",
+          "delta": 10749
+        }
+      ]
+    },
+    "R7": {
+      "title": "reference cross-check: pool totals match the bills entered",
+      "fail": 41,
+      "samples": [
+        {
+          "scenarioId": "seed-56",
+          "seed": 56,
+          "month": "2024-08",
+          "invariant": "R7",
+          "detail": "reference utility pool vs charged",
+          "expected": "11343",
+          "actual": "0",
+          "delta": 11343
+        },
+        {
+          "scenarioId": "seed-91-edge",
+          "seed": 91,
+          "month": "2026-11",
+          "invariant": "R7",
+          "detail": "reference utility pool vs charged",
+          "expected": "11986",
+          "actual": "0",
+          "delta": 11986
+        },
+        {
+          "scenarioId": "seed-93",
+          "seed": 93,
+          "month": "2025-07",
+          "invariant": "R7",
+          "detail": "reference utility pool vs charged",
+          "expected": "10749",
+          "actual": "0",
+          "delta": 10749
+        }
+      ]
+    }
+  },
+  "failingSeeds": [
+    {
+      "seed": 1,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 5,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 8,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 10,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 14,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 15,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 17,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 20,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 24,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 25,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 26,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 28,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 30,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 32,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 33,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 34,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 35,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 37,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 38,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 39,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 40,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 42,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 43,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 44,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 46,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 47,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 48,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 49,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 50,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 52,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 53,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 56,
+      "edge": false,
+      "failures": 2
+    },
+    {
+      "seed": 57,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 60,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 64,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 68,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 69,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 70,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 71,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 74,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 76,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 77,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 78,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 79,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 80,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 82,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 88,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 91,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 92,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 93,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 94,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 95,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 97,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 99,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 100,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 102,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 103,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 104,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 106,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 108,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 109,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 111,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 113,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 114,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 115,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 116,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 117,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 118,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 120,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 121,
+      "edge": true,
+      "failures": 1
+    },
+    {
+      "seed": 122,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 124,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 125,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 126,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 127,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 129,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 130,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 131,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 132,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 133,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 134,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 135,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 136,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 138,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 139,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 140,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 142,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 144,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 145,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 146,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 148,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 149,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 150,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 153,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 154,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 155,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 157,
+      "edge": false,
+      "failures": 5
+    },
+    {
+      "seed": 158,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 159,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 160,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 162,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 163,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 164,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 167,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 168,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 170,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 172,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 173,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 174,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 175,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 176,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 178,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 179,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 180,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 181,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 182,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 183,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 184,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 185,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 186,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 188,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 189,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 190,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 191,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 192,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 193,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 195,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 196,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 197,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 198,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 199,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 200,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 204,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 205,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 206,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 207,
+      "edge": false,
+      "failures": 6
+    },
+    {
+      "seed": 208,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 209,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 210,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 211,
+      "edge": true,
+      "failures": 6
+    },
+    {
+      "seed": 212,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 213,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 215,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 218,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 219,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 220,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 221,
+      "edge": true,
+      "failures": 1
+    },
+    {
+      "seed": 223,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 224,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 225,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 226,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 227,
+      "edge": false,
+      "failures": 5
+    },
+    {
+      "seed": 228,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 229,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 233,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 235,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 236,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 237,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 238,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 240,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 241,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 243,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 244,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 246,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 247,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 248,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 250,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 252,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 254,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 256,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 257,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 258,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 259,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 260,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 264,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 265,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 267,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 268,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 269,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 271,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 272,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 273,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 275,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 276,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 277,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 278,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 279,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 280,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 282,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 283,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 284,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 286,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 289,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 290,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 292,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 294,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 295,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 297,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 298,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 299,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 302,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 303,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 305,
+      "edge": false,
+      "failures": 1
+    },
+    {
+      "seed": 306,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 307,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 308,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 309,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 311,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 312,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 313,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 314,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 315,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 316,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 317,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 318,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 319,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 320,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 321,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 322,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 323,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 326,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 327,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 328,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 329,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 331,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 332,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 333,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 334,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 335,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 336,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 337,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 338,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 339,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 341,
+      "edge": true,
+      "failures": 6
+    },
+    {
+      "seed": 342,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 343,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 344,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 346,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 347,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 348,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 350,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 352,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 354,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 355,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 356,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 357,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 358,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 359,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 360,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 361,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 362,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 363,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 365,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 368,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 369,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 370,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 371,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 372,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 373,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 374,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 376,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 377,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 378,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 379,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 380,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 382,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 383,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 384,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 385,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 386,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 388,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 389,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 390,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 391,
+      "edge": true,
+      "failures": 1
+    },
+    {
+      "seed": 393,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 394,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 395,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 396,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 397,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 398,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 399,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 400,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 401,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 402,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 403,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 404,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 406,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 408,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 409,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 410,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 411,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 412,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 414,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 417,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 420,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 421,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 422,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 423,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 424,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 425,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 426,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 427,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 429,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 430,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 431,
+      "edge": true,
+      "failures": 4
+    },
+    {
+      "seed": 432,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 433,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 435,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 437,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 440,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 441,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 442,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 443,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 444,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 445,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 446,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 447,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 448,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 449,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 450,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 452,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 453,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 455,
+      "edge": false,
+      "failures": 3
+    },
+    {
+      "seed": 456,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 457,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 458,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 462,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 463,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 464,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 467,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 468,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 469,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 470,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 471,
+      "edge": true,
+      "failures": 6
+    },
+    {
+      "seed": 472,
+      "edge": false,
+      "failures": 12
+    },
+    {
+      "seed": 474,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 475,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 476,
+      "edge": false,
+      "failures": 15
+    },
+    {
+      "seed": 477,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 478,
+      "edge": false,
+      "failures": 6
+    },
+    {
+      "seed": 480,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 481,
+      "edge": true,
+      "failures": 3
+    },
+    {
+      "seed": 482,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 483,
+      "edge": false,
+      "failures": 16
+    },
+    {
+      "seed": 486,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 487,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 488,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 489,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 490,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 492,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 494,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 495,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 496,
+      "edge": false,
+      "failures": 8
+    },
+    {
+      "seed": 497,
+      "edge": false,
+      "failures": 4
+    },
+    {
+      "seed": 499,
+      "edge": false,
+      "failures": 4
+    }
+  ]
+}

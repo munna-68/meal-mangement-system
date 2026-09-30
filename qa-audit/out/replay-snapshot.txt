@@ -1,0 +1,141 @@
+TODAY (Asia/Dhaka): 2026-09-30  MONTH: 2026-09
+RATE CARDS: [{"id":"ac0fc94c-e95d-4b63-a35a-9534f4ea5ba2","effectiveFrom":"2026-09-01","effectiveTo":null,"fullMealRate":60,"halfMealRate":35,"guestFullRate":80,"guestHalfRate":45,"sehriRate":70,"feastFlatCharge":200,"khalaNormalRate":300,"khalaSoloRate":400,"managerDailyFee":30,"dailyExtraAmount":300}]
+BILLS: [{"month":"2026-09","type":"ELECTRICITY","amount":600000},{"month":"2026-09","type":"WIFI","amount":15000}]
+EXTRAS: [{"d":"2026-09-30","l":"Daily recurring Extra","a":300,"auto":true,"voided":false,"src":"auto:daily-extra:2026-09-30"},{"d":"2026-09-30","l":"Manager's daily fee","a":30,"auto":true,"voided":false,"src":"auto:manager-fee:2026-09-30"},{"d":"2026-09-30","l":"fridge repare","a":6000,"auto":false,"voided":false,"src":null}]
+BAZAR DATES: ["2026-09-30"]
+CLOSED MONTHS: []
+MEMBERS/ROOMS: [["Arif","205"],["Hasan","102"],["Jubayer","103"],["Mahin","201"],["Nayeem","102"],["Rakib","107"],["Rifat","105"],["Sabbir","101"],["Sajid","202"],["Shakil","103"],["Tanvir","101"],["Uzzal","107"]]
+
+--- apportionUtilities --- {
+  perHeadElectricity: 37500,
+  perHeadWifi: 1250,
+  totalElectricity: 600000,
+  totalWifi: 15000,
+  memberCount: 12,
+  soloCount: 4,
+  byMember: Map(12) {
+    '64ff155a-f825-485d-aec0-760b508e48e8' => { electricity: 75000, wifi: 1250, total: 76250 },
+    'c15fe707-012c-4926-bdcf-b69d70bc94eb' => { electricity: 37500, wifi: 1250, total: 38750 },
+    'c1dfe4ac-f7b3-419e-aedf-ec3651563f98' => { electricity: 37500, wifi: 1250, total: 38750 },
+    'b172a7b0-3564-4c27-a405-4a843d088dd3' => { electricity: 75000, wifi: 1250, total: 76250 },
+    'f6bde022-e14e-4299-b9fc-91d3b6b03c5f' => { electricity: 37500, wifi: 1250, total: 38750 },
+    '9b21b3aa-df1a-47c6-8f36-0cd92e9121dc' => { electricity: 37500, wifi: 1250, total: 38750 },
+    '18272d9e-584c-44d6-93b8-005084992dec' => { electricity: 75000, wifi: 1250, total: 76250 },
+    '88866bf0-b377-4912-86b7-4fc85a5e434f' => { electricity: 37500, wifi: 1250, total: 38750 },
+    'b76759ac-40fd-47c4-a839-fe5e6b45186a' => { electricity: 75000, wifi: 1250, total: 76250 },
+    'd8a0b055-ecc4-4ad4-858e-0fa40ed228dd' => { electricity: 37500, wifi: 1250, total: 38750 },
+    'f9b1ba13-cb7d-4cb5-b29d-d6f54acf03c9' => { electricity: 37500, wifi: 1250, total: 38750 },
+    '149fc9a9-a183-48a2-9afd-20ce2d973c09' => { electricity: 37500, wifi: 1250, total: 38750 }
+  }
+} sum: 615000
+
+--- Settlement rows (finalize: true) ---
+┌─────────┬───────┬───────────┬──────┬──────┬────┬────┬──────┬───────┬───────┬──────┬───────┬───────┬───────┬──────┬─────┬────────┐
+│ (index) │ room  │ name      │ full │ half │ gF │ gH │ meal │ khala │ elec  │ wifi │ kw    │ extra │ cost  │ open │ dep │ close  │
+├─────────┼───────┼───────────┼──────┼──────┼────┼────┼──────┼───────┼───────┼──────┼───────┼───────┼───────┼──────┼─────┼────────┤
+│ 0       │ '101' │ 'Sabbir'  │ 0    │ 1    │ 0  │ 0  │ 35   │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39610 │ 0    │ 0   │ -39610 │
+│ 1       │ '101' │ 'Tanvir'  │ 0    │ 0    │ 0  │ 2  │ 90   │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39665 │ 0    │ 0   │ -39665 │
+│ 2       │ '102' │ 'Hasan'   │ 1    │ 0    │ 0  │ 0  │ 60   │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39635 │ 0    │ 0   │ -39635 │
+│ 3       │ '102' │ 'Nayeem'  │ 0    │ 1    │ 0  │ 2  │ 125  │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39700 │ 0    │ 0   │ -39700 │
+│ 4       │ '103' │ 'Jubayer' │ 0    │ 1    │ 0  │ 0  │ 35   │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39610 │ 0    │ 0   │ -39610 │
+│ 5       │ '103' │ 'Shakil'  │ 1    │ 0    │ 1  │ 0  │ 140  │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39715 │ 0    │ 0   │ -39715 │
+│ 6       │ '105' │ 'Rifat'   │ 0    │ 0    │ 0  │ 0  │ 0    │ 400   │ 75000 │ 1250 │ 76650 │ 525   │ 77175 │ 0    │ 0   │ -77175 │
+│ 7       │ '107' │ 'Rakib'   │ 1    │ 0    │ 0  │ 0  │ 60   │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39635 │ 0    │ 0   │ -39635 │
+│ 8       │ '107' │ 'Uzzal'   │ 1    │ 0    │ 0  │ 0  │ 60   │ 300   │ 37500 │ 1250 │ 39050 │ 525   │ 39635 │ 0    │ 0   │ -39635 │
+│ 9       │ '201' │ 'Mahin'   │ 0    │ 0    │ 0  │ 0  │ 0    │ 400   │ 75000 │ 1250 │ 76650 │ 525   │ 77175 │ 0    │ 0   │ -77175 │
+│ 10      │ '202' │ 'Sajid'   │ 0    │ 0    │ 0  │ 0  │ 0    │ 400   │ 75000 │ 1250 │ 76650 │ 525   │ 77175 │ 0    │ 0   │ -77175 │
+│ 11      │ '205' │ 'Arif'    │ 0    │ 0    │ 0  │ 0  │ 0    │ 400   │ 75000 │ 1250 │ 76650 │ 525   │ 77175 │ 0    │ 0   │ -77175 │
+└─────────┴───────┴───────────┴──────┴──────┴────┴────┴──────┴───────┴───────┴──────┴───────┴───────┴───────┴──────┴─────┴────────┘
+SETTLEMENT TOTALS {
+  utilityColumn: 619000,
+  extras: 6300,
+  cost: 625905,
+  meal: 605,
+  khala: 4000,
+  elec: 600000,
+  wifi: 15000,
+  closing: -625905
+}
+engine totals: {
+  fullMealCount: 4,
+  halfMealCount: 3,
+  guestFullCount: 1,
+  guestHalfCount: 4,
+  sehriCount: 0,
+  mealAmount: 605,
+  khalaAmount: 4000,
+  electricityAmount: 600000,
+  wifiAmount: 15000,
+  extraAmount: 6300,
+  totalCost: 625905
+}
+extraPool: { total: 6300, perMember: 525, memberCount: 12 }
+
+--- Balances (running) --- 2026-09-01 → 2026-09-30
+┌─────────┬───────┬───────────┬──────┬─────┬───────┬───────┬───────┬────────┐
+│ (index) │ room  │ name      │ open │ dep │ util  │ extra │ cost  │ bal    │
+├─────────┼───────┼───────────┼──────┼─────┼───────┼───────┼───────┼────────┤
+│ 0       │ '101' │ 'Sabbir'  │ 0    │ 0   │ 39050 │ 525   │ 39610 │ -39610 │
+│ 1       │ '101' │ 'Tanvir'  │ 0    │ 0   │ 39050 │ 525   │ 39665 │ -39665 │
+│ 2       │ '102' │ 'Hasan'   │ 0    │ 0   │ 39050 │ 525   │ 39635 │ -39635 │
+│ 3       │ '102' │ 'Nayeem'  │ 0    │ 0   │ 39050 │ 525   │ 39700 │ -39700 │
+│ 4       │ '103' │ 'Jubayer' │ 0    │ 0   │ 39050 │ 525   │ 39610 │ -39610 │
+│ 5       │ '103' │ 'Shakil'  │ 0    │ 0   │ 39050 │ 525   │ 39715 │ -39715 │
+│ 6       │ '105' │ 'Rifat'   │ 0    │ 0   │ 76650 │ 525   │ 77175 │ -77175 │
+│ 7       │ '107' │ 'Rakib'   │ 0    │ 0   │ 39050 │ 525   │ 39635 │ -39635 │
+│ 8       │ '107' │ 'Uzzal'   │ 0    │ 0   │ 39050 │ 525   │ 39635 │ -39635 │
+│ 9       │ '201' │ 'Mahin'   │ 0    │ 0   │ 76650 │ 525   │ 77175 │ -77175 │
+│ 10      │ '202' │ 'Sajid'   │ 0    │ 0   │ 76650 │ 525   │ 77175 │ -77175 │
+│ 11      │ '205' │ 'Arif'    │ 0    │ 0   │ 76650 │ 525   │ 77175 │ -77175 │
+└─────────┴───────┴───────────┴──────┴─────┴───────┴───────┴───────┴────────┘
+BALANCES SUMMARY: {
+  openingBalance: 0,
+  deposits: 0,
+  utilityCost: 619000,
+  extraCost: 6300,
+  cost: 625905,
+  balance: -625905,
+  membersInDeficit: 12,
+  totalDeficit: 625905,
+  membersInCredit: 0,
+  totalCredit: 0
+}
+
+--- computeDayTotals 2026-09-30 ---
+{
+  date: '2026-09-30',
+  fullCount: 4,
+  halfCount: 3,
+  nightCount: 6,
+  noonCount: 5,
+  guestFullCount: 1,
+  guestHalfCount: 4,
+  sehriCount: 0,
+  fullAmount: 240,
+  halfAmount: 105,
+  guestFullAmount: 80,
+  guestHalfAmount: 180,
+  guestDeductionAmount: 25,
+  sehriAmount: 0,
+  mealsSubtotal: 580,
+  extraAmount: 300,
+  managerFeeAmount: 30,
+  deductionAmount: 0,
+  totalBudget: 850
+}
+
+--- register rows ---
+[
+  { name: 'Sabbir', room: '101', full: 0, half: 1 },
+  { name: 'Tanvir', room: '101', full: 0, half: 0 },
+  { name: 'Hasan', room: '102', full: 1, half: 0 },
+  { name: 'Nayeem', room: '102', full: 0, half: 1 },
+  { name: 'Jubayer', room: '103', full: 0, half: 1 },
+  { name: 'Shakil', room: '103', full: 1, half: 0 },
+  { name: 'Rifat', room: '105', full: 0, half: 0 },
+  { name: 'Rakib', room: '107', full: 1, half: 0 },
+  { name: 'Uzzal', room: '107', full: 1, half: 0 },
+  { name: 'Mahin', room: '201', full: 0, half: 0 },
+  { name: 'Sajid', room: '202', full: 0, half: 0 },
+  { name: 'Arif', room: '205', full: 0, half: 0 }
+]

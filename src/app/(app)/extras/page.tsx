@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { PageHeader, Stat } from "@/components/page-header";
 import {
+  computeMonth,
   computeMonthlyFixedExtraSummary,
   isMemberActiveInRange,
   khalaAmountFor,
@@ -20,7 +21,7 @@ import {
   monthStart,
   todayKey,
 } from "@/lib/dates";
-import { formatTaka, roundTaka } from "@/lib/money";
+import { formatTaka, sum } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { ensureAutoExtrasForMonth } from "@/server/auto-extras";
 import {
@@ -84,6 +85,10 @@ export default async function ExtrasPage() {
 
   const months = Array.from({ length: 12 }, (_, index) => addMonths(now, -index));
 
+  // Khala is set by the rate card, not typed in here: the normal rate for the
+  // month, or the solo rate for somebody alone in a multi-bed room. A figure
+  // typed into a "Khala bill" box would quietly change what every member is
+  // charged, so there is no such box.
   const billRecords: BillRecord[] = months.map((month) => {
     const from = monthStart(month);
     const to = monthEnd(month);
@@ -92,8 +97,8 @@ export default async function ExtrasPage() {
       isMemberActiveInRange(m, from, to, today),
     );
     const occupancy = occupancyForRange({ members, rooms, from, to, today });
-    const calculatedKhala = monthMembers.reduce(
-      (sum, m) => sum + khalaAmountFor({ member: m, occupancy, rateCard: card }),
+    const khala = monthMembers.reduce(
+      (total, m) => total + khalaAmountFor({ member: m, occupancy, rateCard: card }),
       0,
     );
 
@@ -103,24 +108,12 @@ export default async function ExtrasPage() {
     const wifiBill = bills.find(
       (bill) => bill.month === month && bill.type === "WIFI",
     );
-    const khalaBill = bills.find(
-      (bill) => bill.month === month && bill.type === "KHALA",
-    );
-
-    const hasSavedKhala = khalaBill !== undefined && khalaBill.amount > 0;
-    const khala = hasSavedKhala
-      ? khalaBill.amount
-      : calculatedKhala > 0
-        ? calculatedKhala
-        : null;
 
     return {
       month,
       electricity: elecBill?.amount ?? null,
       wifi: wifiBill?.amount ?? null,
-      khala,
-      calculatedKhala,
-      hasSavedKhala,
+      khala: khala > 0 ? khala : null,
     };
   });
 
@@ -146,24 +139,47 @@ export default async function ExtrasPage() {
     const recurringTotal = recurringExtras.reduce((sum, item) => sum + item.amount, 0);
     const manualTotal = manualExtras.reduce((sum, item) => sum + item.amount, 0);
     const extrasPoolTotal = recurringTotal + manualTotal;
-    const extrasPerHead =
-      boarderCount > 0 ? roundTaka(extrasPoolTotal / boarderCount) : 0;
 
-    // Utility pool = electricity + wifi + khala bill
-    const bill = billRecords.find((b) => b.month === month);
-    const utilityPoolTotal =
-      (bill?.electricity ?? 0) + (bill?.wifi ?? 0) + (bill?.khala ?? 0);
-    const utilityPerHead =
-      boarderCount > 0 ? roundTaka(utilityPoolTotal / boarderCount) : 0;
+    // What each member actually carries, from the same engine the Settlement
+    // and Balances pages read. The extras pool is an equal split, so it differs
+    // by at most a taka; the utility pool is split by room capacity, so it
+    // genuinely ranges.
+    const monthBills = bills
+      .filter((bill) => bill.month === month)
+      .map((bill) => ({
+        month: bill.month,
+        type: bill.type,
+        amount: bill.amount,
+      }));
+    const monthComputation = computeMonth({
+      month,
+      cutoff: to,
+      members,
+      rooms,
+      changes: [],
+      guestMeals: [],
+      extras: safeExtras,
+      bills: monthBills,
+      rateCards,
+      today,
+    });
+    const utilityTotals = [...monthComputation.perMember.values()].map(
+      (row) => row.khalaElecWifiAmount,
+    );
+    const extraShares = [...monthComputation.perMember.values()].map(
+      (row) => row.extraAmount,
+    );
 
     return {
       month,
       extrasPoolTotal,
-      extrasPerHead,
+      extrasPerHeadLow: extraShares.length > 0 ? Math.min(...extraShares) : 0,
+      extrasPerHeadHigh: extraShares.length > 0 ? Math.max(...extraShares) : 0,
       recurringTotal,
       manualTotal,
-      utilityPoolTotal,
-      utilityPerHead,
+      utilityPoolTotal: sum(utilityTotals),
+      utilityPerHeadLow: utilityTotals.length > 0 ? Math.min(...utilityTotals) : 0,
+      utilityPerHeadHigh: utilityTotals.length > 0 ? Math.max(...utilityTotals) : 0,
       boarderCount,
       mealDaysRan: confirmedCount,
       dailyRate,
@@ -199,18 +215,22 @@ export default async function ExtrasPage() {
     <>
       <PageHeader
         title="Extras & Utility Bills"
-        description="The shared cost pools: Extras pool (daily recurring extra + manual charges) and Utility pool (electricity, wifi, and khala bills)."
+        description="The shared cost pools: Extras pool (daily recurring extra + manual charges) and Utility pool (electricity and wifi bills, plus Khala from the rate card)."
       />
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat
           label="Extras pool"
-          value={`${formatTaka(currentPool.extrasPerHead)} / head`}
+          value={`${formatTaka(currentPool.extrasPerHeadLow)}–${formatTaka(
+            currentPool.extrasPerHeadHigh,
+          )} / member`}
           hint={`total ${formatTaka(currentPool.extrasPoolTotal)} across ${currentPool.boarderCount} boarders`}
         />
         <Stat
           label="Utility pool"
-          value={`${formatTaka(currentPool.utilityPerHead)} / head`}
-          hint={`total ${formatTaka(currentPool.utilityPoolTotal)} across ${currentPool.boarderCount} boarders`}
+          value={`${formatTaka(currentPool.utilityPerHeadLow)}–${formatTaka(
+            currentPool.utilityPerHeadHigh,
+          )} / member`}
+          hint={`total ${formatTaka(currentPool.utilityPoolTotal)} across ${currentPool.boarderCount} boarders — split by room capacity`}
         />
         <Stat
           label="Active boarders"

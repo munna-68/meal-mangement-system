@@ -5,6 +5,7 @@ import { TrashIcon } from "lucide-react";
 
 import { MemberPicker } from "@/components/member-picker";
 import { useAction } from "@/components/use-action";
+import { useIdempotencyKey } from "@/components/use-idempotency-key";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,7 @@ export function DepositsClient({
   deposits: DepositRecord[];
 }) {
   const { run, pending } = useAction();
+  const idempotency = useIdempotencyKey();
   const [memberId, setMemberId] = useState(members[0]?.id ?? "");
   const [date, setDate] = useState(todayKey());
   const [amount, setAmount] = useState("");
@@ -106,11 +108,13 @@ export function DepositsClient({
                   createDeposit({
                     memberId,
                     date,
-                    amount: Number(amount),
+                    amount,
                     notes,
+                    idempotencyKey: idempotency.current(),
                   }),
                 {
                   onSuccess: () => {
+                    idempotency.reset();
                     setAmount("");
                     setNotes("");
                   },

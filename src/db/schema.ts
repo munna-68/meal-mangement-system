@@ -318,6 +318,11 @@ export const extraLineItems = pgTable(
       .notNull()
       .default(false),
     isAuto: boolean("is_auto").notNull().default(false),
+    /**
+     * Unique per source. Auto rows use `auto:*` keys so a day is never
+     * generated twice; a manually added row uses the `manual:*` key the browser
+     * sent with the form, so double-clicking "Add" cannot add it twice.
+     */
     sourceKey: varchar("source_key", { length: 80 }).unique(),
     voided: boolean("voided").notNull().default(false),
     createdAt: createdAt(),
@@ -347,9 +352,19 @@ export const deposits = pgTable(
     date: dateColumn("date").notNull(),
     amount: integer("amount").notNull(),
     notes: text("notes"),
+    /**
+     * A key generated once per submission in the browser and reused until the
+     * save succeeds. A double-click, a retry after a timeout, or the same paste
+     * submitted twice all send the same key, so the unique index below can only
+     * ever accept one of them.
+     */
+    idempotencyKey: varchar("idempotency_key", { length: 64 }),
     createdAt: createdAt(),
   },
-  (t) => [index("deposits_member_idx").on(t.memberId, t.date)],
+  (t) => [
+    index("deposits_member_idx").on(t.memberId, t.date),
+    uniqueIndex("deposits_idempotency_key_uq").on(t.idempotencyKey),
+  ],
 );
 
 /**
