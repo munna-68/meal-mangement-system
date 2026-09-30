@@ -272,7 +272,7 @@ export function BazarWorkspace({
           />
           {totals.guestDeductionAmount > 0 ? (
             <Line
-              label="5 taka deducted per guest meal"
+              label="প্রতি অতিথির খাবারে ৫ টাকা কর্তন"
               detail={`${totals.guestFullCount + totals.guestHalfCount} × 5`}
               amount={-totals.guestDeductionAmount}
               negative

@@ -85,7 +85,7 @@ export function BazarSlip({
         <table className={styles.roomTable}>
           <thead>
             <tr>
-              <th>ক্রম নং</th>
+              <th>রুম নং</th>
               <th>রাত</th>
               <th>দুপুর</th>
               <th className={styles.guestCol}>গেস্ট ফুল</th>
@@ -168,7 +168,9 @@ export function BazarSlip({
             {totals.guestDeductionAmount > 0 ? (
               <div className={`${styles.moneyRow} ${styles.deductionRow}`}>
                 <span className={styles.moneyLabel}>
-                  5 taka deducted per guest meal
+                  প্রতি অতিথির খাবারে
+                  <br />
+                  ৫ টাকা কর্তন
                 </span>
                 <span className={styles.moneyFormula}>
                   {bn(totals.guestFullCount + totals.guestHalfCount)} × {bn(5)} =
