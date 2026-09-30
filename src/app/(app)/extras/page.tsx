@@ -141,7 +141,11 @@ export default async function ExtrasPage() {
     const monthExtras = safeExtras.filter(
       (item) => monthOf(item.date) === month && !item.voided,
     );
-    const extrasPoolTotal = monthExtras.reduce((sum, item) => sum + item.amount, 0);
+    const recurringExtras = monthExtras.filter((item) => item.isAuto);
+    const manualExtras = monthExtras.filter((item) => !item.isAuto);
+    const recurringTotal = recurringExtras.reduce((sum, item) => sum + item.amount, 0);
+    const manualTotal = manualExtras.reduce((sum, item) => sum + item.amount, 0);
+    const extrasPoolTotal = recurringTotal + manualTotal;
     const extrasPerHead =
       boarderCount > 0 ? roundTaka(extrasPoolTotal / boarderCount) : 0;
 
@@ -156,6 +160,8 @@ export default async function ExtrasPage() {
       month,
       extrasPoolTotal,
       extrasPerHead,
+      recurringTotal,
+      manualTotal,
       utilityPoolTotal,
       utilityPerHead,
       boarderCount,
@@ -198,13 +204,13 @@ export default async function ExtrasPage() {
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat
           label="Extras pool"
-          value={formatTaka(currentPool.extrasPoolTotal)}
-          hint={`${formatTaka(currentPool.extrasPerHead)} / head (${currentPool.boarderCount} boarders)`}
+          value={`${formatTaka(currentPool.extrasPerHead)} / head`}
+          hint={`total ${formatTaka(currentPool.extrasPoolTotal)} across ${currentPool.boarderCount} boarders`}
         />
         <Stat
           label="Utility pool"
-          value={formatTaka(currentPool.utilityPoolTotal)}
-          hint={`${formatTaka(currentPool.utilityPerHead)} / head (elec + wifi + khala)`}
+          value={`${formatTaka(currentPool.utilityPerHead)} / head`}
+          hint={`total ${formatTaka(currentPool.utilityPoolTotal)} across ${currentPool.boarderCount} boarders`}
         />
         <Stat
           label="Active boarders"

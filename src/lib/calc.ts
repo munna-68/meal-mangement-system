@@ -782,16 +782,43 @@ export function isSoloInSharedRoom(room: RoomOccupancy | undefined): boolean {
 }
 
 /**
- * Electricity and wifi are split evenly per head — every member pays the same
- * base share — except that a member alone in a multi-bed room pays a multiple
- * of the electricity and/or wifi share. The two multipliers are configurable
- * because the mess does not always treat both bills the same way.
- *
- * NOTE (deliberate, do not "fix"): the wifi multiplier defaults to 1, i.e. a
- * solo member pays the *single* wifi share. Doubling wifi is an optional
- * per-mess toggle in Mess Settings (`soloWifiMultiplier`), not automatic.
- * Electricity defaults to 2. Changing either default here would silently
- * re-price every past month, so the defaults are asserted by tests.
+ * Distributes an integer money total across items according to proportional weights,
+ * using the largest-remainder (Hare-Niemeyer) method. The sum of the resulting
+ * integers is guaranteed to equal `totalAmount` exactly.
+ */
+export function distributeTaka(totalAmount: number, weights: number[]): number[] {
+  if (totalAmount === 0 || weights.length === 0) {
+    return weights.map(() => 0);
+  }
+  const totalWeight = sum(weights);
+  if (totalWeight <= 0) {
+    return weights.map(() => 0);
+  }
+
+  const exacts = weights.map((w) => (w / totalWeight) * totalAmount);
+  const floors = exacts.map((e) => Math.floor(e));
+  const currentSum = sum(floors);
+  const remainder = Math.round(totalAmount - currentSum);
+
+  const indices = weights.map((_, i) => i);
+  indices.sort((a, b) => {
+    const diffA = exacts[a] - floors[a];
+    const diffB = exacts[b] - floors[b];
+    return diffB - diffA || a - b;
+  });
+
+  const result = [...floors];
+  for (let i = 0; i < remainder && i < indices.length; i++) {
+    result[indices[i]] += 1;
+  }
+  return result;
+}
+
+/**
+ * Electricity and wifi are split using room capacity weights: a member alone in
+ * a multi-bed room pays a multiple of the electricity and/or wifi share.
+ * The total bill is apportioned proportionally across all members so that the sum
+ * of all members' shares equals the bill amount exactly (no phantom overcharging).
  */
 export function apportionUtilities(input: {
   members: MemberData[];
@@ -837,32 +864,44 @@ export function apportionUtilities(input: {
   );
   const memberCount = activeMembers.length;
 
+  const isSoloList = activeMembers.map((member) =>
+    isSoloInSharedRoom(occupancy.get(member.roomId)),
+  );
+  const soloCount = isSoloList.filter(Boolean).length;
+
+  const elecWeights = isSoloList.map((solo) =>
+    solo ? soloElectricityMultiplier : 1,
+  );
+  const wifiWeights = isSoloList.map((solo) =>
+    solo ? soloWifiMultiplier : 1,
+  );
+
+  const totalElecWeight = sum(elecWeights);
+  const totalWifiWeight = sum(wifiWeights);
+
   const perHeadElectricity =
-    memberCount > 0 ? totalElectricity / memberCount : 0;
-  const perHeadWifi = memberCount > 0 ? totalWifi / memberCount : 0;
+    totalElecWeight > 0 ? totalElectricity / totalElecWeight : 0;
+  const perHeadWifi =
+    totalWifiWeight > 0 ? totalWifi / totalWifiWeight : 0;
+
+  const fullElectricityShares = distributeTaka(totalElectricity, elecWeights);
+  const fullWifiShares = distributeTaka(totalWifi, wifiWeights);
 
   const byMember = new Map<string, UtilityShare>();
-  let soloCount = 0;
-  for (const member of activeMembers) {
-    const solo = isSoloInSharedRoom(occupancy.get(member.roomId));
-    if (solo) soloCount += 1;
+  activeMembers.forEach((member, i) => {
     const fraction = accrualFractionByMember?.get(member.id) ?? 1;
-    const electricity = roundTaka(
-      perHeadElectricity * (solo ? soloElectricityMultiplier : 1) * fraction,
-    );
-    const wifi = roundTaka(
-      perHeadWifi * (solo ? soloWifiMultiplier : 1) * fraction,
-    );
+    const electricity = roundTaka(fullElectricityShares[i] * fraction);
+    const wifi = roundTaka(fullWifiShares[i] * fraction);
     byMember.set(member.id, {
       electricity,
       wifi,
       total: electricity + wifi,
     });
-  }
+  });
 
   return {
-    perHeadElectricity,
-    perHeadWifi,
+    perHeadElectricity: roundTaka(perHeadElectricity),
+    perHeadWifi: roundTaka(perHeadWifi),
     totalElectricity,
     totalWifi,
     memberCount,
@@ -1201,14 +1240,12 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
         khalaAmountFor({ member, occupancy, rateCard: monthCard }),
       );
     }
-    const totalWeight = sum([...weights.values()]);
-    for (const member of activeMembers) {
-      const weight = weights.get(member.id) ?? 0;
-      const flat =
-        totalWeight > 0 ? (weight / totalWeight) * khalaBill.amount : 0;
+    const memberWeights = activeMembers.map((m) => weights.get(m.id) ?? 0);
+    const fullKhalaShares = distributeTaka(khalaBill.amount, memberWeights);
+    activeMembers.forEach((member, i) => {
       const fraction = accrualFractionByMember.get(member.id) ?? 1;
-      khalaByMember.set(member.id, roundTaka(flat * fraction));
-    }
+      khalaByMember.set(member.id, roundTaka(fullKhalaShares[i] * fraction));
+    });
   } else {
     for (const member of activeMembers) {
       const flat = khalaAmountFor({ member, occupancy, rateCard: monthCard });

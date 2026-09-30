@@ -174,7 +174,7 @@ export default async function BalancesPage() {
                 <th className="px-3 py-2 text-left font-medium">Member</th>
                 <th className="px-3 py-2 text-right font-medium">Opening</th>
                 <th className="px-3 py-2 text-right font-medium">Deposits</th>
-                <th className="px-3 py-2 text-right font-medium">Utility share</th>
+                <th className="px-3 py-2 text-right font-medium">Khala+Wifi+Electricity</th>
                 <th className="px-3 py-2 text-right font-medium">Extras share</th>
                 <th className="px-3 py-2 text-right font-medium">Total cost</th>
                 <th className="px-3 py-2 text-right font-medium">Balance</th>

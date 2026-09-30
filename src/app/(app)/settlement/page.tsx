@@ -300,7 +300,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
                 <th className="px-3 py-2 text-right font-medium">Sehri</th>
               ) : null}
               <th className="px-3 py-2 text-right font-medium">Guest F/H</th>
-              <th className="px-3 py-2 text-right font-medium">Utility share</th>
+              <th className="px-3 py-2 text-right font-medium">Khala+Wifi+Electricity</th>
               <th className="px-3 py-2 text-right font-medium">Extras share</th>
               <th className="px-3 py-2 text-right font-medium">Total cost</th>
               <th className="px-3 py-2 text-right font-medium">Opening</th>

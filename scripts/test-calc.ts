@@ -376,40 +376,39 @@ section("Electricity + wifi apportionment (even per head, solo multiples)");
   });
 
   check("member count is the divisor", apportionment.memberCount, 4);
-  check("per-head electricity = 1000/4", apportionment.perHeadElectricity, 250);
+  check("per-head electricity = 1000/5 weight", apportionment.perHeadElectricity, 200);
   check("per-head wifi = 500/4", apportionment.perHeadWifi, 125);
   check("exactly one solo member", apportionment.soloCount, 1);
 
   check("sharing a 2-bed room pays the base share", apportionment.byMember.get("m1"), {
-    electricity: 250,
+    electricity: 200,
     wifi: 125,
-    total: 375,
+    total: 325,
   });
   check("roommate pays the same base share", apportionment.byMember.get("m2"), {
-    electricity: 250,
+    electricity: 200,
     wifi: 125,
-    total: 375,
+    total: 325,
   });
   check(
     "alone in a 2-bed room: electricity doubled, wifi NOT doubled",
     apportionment.byMember.get("m3"),
-    { electricity: 500, wifi: 125, total: 625 },
+    { electricity: 400, wifi: 125, total: 525 },
   );
   check("a 1-bed room pays the base share", apportionment.byMember.get("m4"), {
-    electricity: 250,
+    electricity: 200,
     wifi: 125,
-    total: 375,
+    total: 325,
   });
 
-  // Doubling one member's share collects more than the bill. That is the mess's
-  // rule as described, so it is asserted rather than treated as a rounding bug.
+  // Apportionment sums to the bill total exactly (no overcharging).
   const collected = [...apportionment.byMember.values()].reduce(
     (t, s) => t + s.total,
     0,
   );
   const billTotal =
     apportionment.totalElectricity + apportionment.totalWifi;
-  check("collected = bill + one extra electricity share", collected, billTotal + 250);
+  check("collected equals bill total", collected, billTotal);
 
   // The multiples are configurable, because the mess does not always treat both
   // bills the same way.
@@ -424,9 +423,9 @@ section("Electricity + wifi apportionment (even per head, solo multiples)");
     today: "2025-03-31",
   });
   check("wifi can be doubled too", wifiDoubled.byMember.get("m3"), {
-    electricity: 500,
-    wifi: 250,
-    total: 750,
+    electricity: 400,
+    wifi: 200,
+    total: 600,
   });
 
   const noPremium = apportionUtilities({
@@ -580,11 +579,11 @@ section("Monthly computation");
   check("31 full meals counted", m1.fullMealCount, 31);
   check("meal amount = 31 x 60", m1.mealAmount, 1860);
   check("khala is flat for the month, not per day", m1.khalaAmount, 300);
-  check("khala + wifi + electricity = 300 + 375", m1.khalaElecWifiAmount, 675);
+  check("khala + wifi + electricity = 300 + 325", m1.khalaElecWifiAmount, 625);
   check("extra is the same for everyone", m1.extraAmount, 375);
-  check("total cost m1 = 1860+675+375", m1.totalCost, 2910);
-  check("solo member pays 400 khala + 625 utilities", m3.khalaElecWifiAmount, 1025);
-  check("total cost m3 = 1860+1025+375", m3.totalCost, 3260);
+  check("total cost m1 = 1860+625+375", m1.totalCost, 2860);
+  check("solo member pays 400 khala + 525 utilities", m3.khalaElecWifiAmount, 925);
+  check("total cost m3 = 1860+925+375", m3.totalCost, 3160);
   check("everyone gets an identical extra", [
     ...computation.perMember.values(),
   ].every((r) => r.extraAmount === 375), true);
@@ -629,10 +628,10 @@ section("Settlement rows and balance carry-forward");
 
   check("m1 opening balance is 0", m1.openingBalance, 0);
   check("m1 new deposits", m1.newDeposits, 5000);
-  check("m1 closing = 5000 - 2910", m1.closingBalance, 2090);
+  check("m1 closing = 5000 - 2860", m1.closingBalance, 2140);
   check("deposit after the month is excluded", m3.newDeposits, 1000);
-  check("m3 closing = 1000 - 3260 (negative)", m3.closingBalance, -2260);
-  check("m2 closing = 0 - 2910", m2.closingBalance, -2910);
+  check("m3 closing = 1000 - 3160 (negative)", m3.closingBalance, -2160);
+  check("m2 closing = 0 - 2860", m2.closingBalance, -2860);
 
   const nextMonth = buildSettlementRows({
     computation,
@@ -644,7 +643,7 @@ section("Settlement rows and balance carry-forward");
   check(
     "closing balance becomes next month's opening",
     nextMonth.find((r) => r.memberId === "m1")!.openingBalance,
-    2090,
+    2140,
   );
 }
 
@@ -681,20 +680,20 @@ section("Running balance (month-to-date)");
   // flat monthly amounts accrued by the same 20/31 fraction.
   //   20 x 60 = 1200
   //   Khala     round(300 x 20/31) = 194
-  //   Elec+wifi round(250 x 20/31) + round(125 x 20/31) = 161 + 81 = 242
+  //   Elec+wifi round(200 x 20/31) + round(125 x 20/31) = 129 + 81 = 210
   //   Extra     the pool is already date-bounded, so it is not pro-rated: 375
-  check("20 full meals to date", m1.cost, 1200 + 194 + 242 + 375);
-  check("balance = 5000 - 2011", m1.balance, 5000 - (1200 + 194 + 242 + 375));
-  check("member with no deposit is in deficit", m2.balance, -(1200 + 194 + 242 + 375));
+  check("20 full meals to date", m1.cost, 1200 + 194 + 210 + 375);
+  check("balance = 5000 - 1979", m1.balance, 5000 - (1200 + 194 + 210 + 375));
+  check("member with no deposit is in deficit", m2.balance, -(1200 + 194 + 210 + 375));
   check("deficit count", result.summary.membersInDeficit, 3);
   // m3 is solo in a 2-bed room: Khala round(400 x 20/31) = 258 and
-  // round(250 x 2 x 20/31) + round(125 x 20/31) = 323 + 81 = 404.
+  // round(400 x 20/31) + round(125 x 20/31) = 258 + 81 = 339.
   const m3 = result.rows.find((r) => r.memberId === "m3")!;
-  check("solo member's month-to-date cost", m3.cost, 1200 + 258 + 404 + 375);
+  check("solo member's month-to-date cost", m3.cost, 1200 + 258 + 339 + 375);
   check(
-    "mess-wide balance = 5000 - 2011 - 2011 - 2237 - 2011",
+    "mess-wide balance = 5000 - 1979 - 1979 - 2172 - 1979",
     result.summary.balance,
-    5000 - 2011 - 2011 - 2237 - 2011,
+    5000 - 1979 - 1979 - 2172 - 1979,
   );
 }
 
@@ -1044,12 +1043,12 @@ section("Flat monthly charges accrue day by day");
   const tenth = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-10" });
   const t1 = tenth.perMember.get("m1")!;
   check("day 10 of 31: Khala accrued, not billed in full", t1.khalaAmount, Math.round((300 * 10) / 31));
-  check("day 10 of 31: electricity accrued", t1.electricityAmount, Math.round((250 * 10) / 31));
+  check("day 10 of 31: electricity accrued", t1.electricityAmount, Math.round((200 * 10) / 31));
   check("day 10 of 31: wifi accrued", t1.wifiAmount, Math.round((125 * 10) / 31));
   check("day 10 of 31: 10 days of meals", t1.mealAmount, 10 * 60);
   check(
     "day 10 of 31 is nowhere near a full month of flat charges",
-    t1.khalaElecWifiAmount < 300 + 375,
+    t1.khalaElecWifiAmount < 300 + 325,
     true,
   );
 
@@ -1057,7 +1056,7 @@ section("Flat monthly charges accrue day by day");
   const first = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-03-01" });
   const f1 = first.perMember.get("m1")!;
   check("day 1 of 31: one day of Khala", f1.khalaAmount, Math.round(300 / 31));
-  check("day 1 of 31: one day of electricity", f1.electricityAmount, Math.round(250 / 31));
+  check("day 1 of 31: one day of electricity", f1.electricityAmount, Math.round(200 / 31));
   check("day 1 of 31: one day of meals", f1.mealAmount, 60);
   check("day 1 of 31: one day of wifi", f1.wifiAmount, Math.round(125 / 31));
 
@@ -1065,7 +1064,7 @@ section("Flat monthly charges accrue day by day");
   const finished = computeMonth({ ...base, extras: [], bills: BILLS, today: "2025-04-15" });
   const d1 = finished.perMember.get("m1")!;
   check("a finished month bills Khala in full", d1.khalaAmount, 300);
-  check("a finished month bills the full electricity share", d1.electricityAmount, 250);
+  check("a finished month bills the full electricity share", d1.electricityAmount, 200);
   check("a finished month bills the full wifi share", d1.wifiAmount, 125);
   check("a finished month bills the full extra share", finished.perMember.get("m3")!.khalaAmount, 400);
 
@@ -1103,7 +1102,7 @@ section("Flat monthly charges accrue day by day");
     today: "2025-03-10",
   });
   check("finalize: Khala is billed in full mid-month", billing.perMember.get("m1")!.khalaAmount, 300);
-  check("finalize: electricity is billed in full", billing.perMember.get("m1")!.electricityAmount, 250);
+  check("finalize: electricity is billed in full", billing.perMember.get("m1")!.electricityAmount, 200);
   check("finalize: wifi is billed in full", billing.perMember.get("m1")!.wifiAmount, 125);
   check("finalize: a solo member's Khala is billed in full", billing.perMember.get("m3")!.khalaAmount, 400);
   check("finalize: meals still stop at today", billing.perMember.get("m1")!.mealAmount, 10 * 60);
@@ -1386,7 +1385,7 @@ section("Declared opening balance seeds the first open month");
   check(
     "balance = opening + deposits - cost",
     b1.balance,
-    900 + 5000 - (1200 + 194 + 242 + 375),
+    900 + 5000 - (1200 + 194 + 210 + 375),
   );
   check("members without a declared opening still start at zero", b2.openingBalance, 0);
 
@@ -1715,12 +1714,12 @@ section("Password policy and solo wifi toggle");
   const doubleWifi = computeMonth({ ...base, soloWifiMultiplier: 2 });
 
   check("default: a solo member pays the single wifi share", singleWifi.perMember.get("m3")!.wifiAmount, 125);
-  check("toggle on: a solo member pays double wifi", doubleWifi.perMember.get("m3")!.wifiAmount, 250);
-  check("the toggle leaves a shared-room member alone", doubleWifi.perMember.get("m1")!.wifiAmount, 125);
+  check("toggle on: a solo member pays double wifi", doubleWifi.perMember.get("m3")!.wifiAmount, 200);
+  check("the toggle apportions shared-room member's share proportionally", doubleWifi.perMember.get("m1")!.wifiAmount, 100);
   check(
     "the toggle raises the solo member's month by exactly the extra wifi share",
     doubleWifi.perMember.get("m3")!.totalCost - singleWifi.perMember.get("m3")!.totalCost,
-    125,
+    75,
   );
   check(
     "the toggle does not touch electricity",
@@ -1994,6 +1993,120 @@ section("Two separate cost pools, khala bill, and manager fee deduction");
   check("running balance row has extraCost 525", running.rows[0].extraCost, 525);
   check("running balance summary has utilityCost 7200", running.summary.utilityCost, 7200);
   check("running balance summary has extraCost 6300", running.summary.extraCost, 6300);
+}
+
+// ---------------------------------------------------------------------------
+// Room-capacity utility split and exact pool reconciliation
+// ---------------------------------------------------------------------------
+
+section("Room-capacity utility split and exact pool reconciliation");
+{
+  // 12 active members:
+  // 8 members in 4 shared double rooms (2 people each -> normal weight 1)
+  // 4 members in 4 single-occupancy double rooms (1 person each -> solo weight 2)
+  const userRooms: RoomData[] = [
+    { id: "r1", number: "101", capacity: 2, solo: false },
+    { id: "r2", number: "102", capacity: 2, solo: false },
+    { id: "r3", number: "103", capacity: 2, solo: false },
+    { id: "r4", number: "104", capacity: 2, solo: false },
+    { id: "r5", number: "201", capacity: 2, solo: false },
+    { id: "r6", number: "202", capacity: 2, solo: false },
+    { id: "r7", number: "203", capacity: 2, solo: false },
+    { id: "r8", number: "204", capacity: 2, solo: false },
+  ];
+  const userMembers: MemberData[] = [
+    member("u1", "r1", { joinDate: "2026-09-01" }),
+    member("u2", "r1", { joinDate: "2026-09-01" }),
+    member("u3", "r2", { joinDate: "2026-09-01" }),
+    member("u4", "r2", { joinDate: "2026-09-01" }),
+    member("u5", "r3", { joinDate: "2026-09-01" }),
+    member("u6", "r3", { joinDate: "2026-09-01" }),
+    member("u7", "r4", { joinDate: "2026-09-01" }),
+    member("u8", "r4", { joinDate: "2026-09-01" }),
+    member("u9", "r5", { joinDate: "2026-09-01" }),
+    member("u10", "r6", { joinDate: "2026-09-01" }),
+    member("u11", "r7", { joinDate: "2026-09-01" }),
+    member("u12", "r8", { joinDate: "2026-09-01" }),
+  ];
+
+  const bills: UtilityBillData[] = [
+    { month: "2026-09", type: "ELECTRICITY", amount: 600000 },
+    { month: "2026-09", type: "WIFI", amount: 15000 },
+    { month: "2026-09", type: "KHALA", amount: 4000 },
+  ];
+
+  const calc = computeMonth({
+    month: "2026-09",
+    finalize: true,
+    members: userMembers,
+    rooms: userRooms,
+    changes: [],
+    guestMeals: [],
+    extras: [
+      { id: "rec", date: "2026-09-01", label: "Daily recurring", amount: 8400, category: "RECURRING_DAILY", showInDailyBudget: true, voided: false },
+      { id: "man", date: "2026-09-15", label: "Fridge repair", amount: 6000, category: "ONE_OFF", showInDailyBudget: false, voided: false },
+    ],
+    bills,
+    rateCards: [{ ...RATE_CARD, khalaNormalRate: 300, khalaSoloRate: 400 }],
+    soloElectricityMultiplier: 2,
+    soloWifiMultiplier: 1,
+    today: "2026-09-30",
+  });
+
+  // Verify pool totals
+  const utilityPoolTotal = 600000 + 15000 + 4000;
+  const extrasPoolTotal = 8400 + 6000;
+  check("utility pool total is 619,000", utilityPoolTotal, 619000);
+  check("extras pool total is 14,400", calc.extraPool.total, extrasPoolTotal);
+  check("extras per member is 1,200", calc.extraPool.perMember, 1200);
+
+  // Verify individual member shares
+  const sharedMember = calc.perMember.get("u1")!;
+  const soloMember = calc.perMember.get("u9")!;
+
+  // Electricity: 600,000 across weight 16 (8x1 + 4x2)
+  check("shared member electricity is 37,500", sharedMember.electricityAmount, 37500);
+  check("solo member electricity is 75,000 (exactly double 37,500)", soloMember.electricityAmount, 75000);
+
+  // Wifi: 15,000 across 12 members (multiplier 1)
+  check("shared member wifi is 1,250", sharedMember.wifiAmount, 1250);
+  check("solo member wifi is 1,250", soloMember.wifiAmount, 1250);
+
+  // Khala: 4,000 across weights (8x300 + 4x400 = 4,000)
+  check("shared member khala is 300", sharedMember.khalaAmount, 300);
+  check("solo member khala is 400", soloMember.khalaAmount, 400);
+
+  // Combined utility share (Khala+Wifi+Electricity)
+  check("shared member utility share is 37,500 + 1,250 + 300 = 39,050", sharedMember.khalaElecWifiAmount, 39050);
+  check("solo member utility share is 75,000 + 1,250 + 400 = 76,650", soloMember.khalaElecWifiAmount, 76650);
+
+  // CRITICAL CHECK: Sum of all member utility shares equals the utility pool EXACTLY
+  const totalSettlementUtility = [...calc.perMember.values()].reduce((acc, r) => acc + r.khalaElecWifiAmount, 0);
+  check("settlement utility column total equals utility pool total (619,000) exactly", totalSettlementUtility, 619000);
+
+  // Verify with an uneven number requiring rounding distribution
+  const unevenBills: UtilityBillData[] = [
+    { month: "2026-09", type: "ELECTRICITY", amount: 600001 },
+    { month: "2026-09", type: "WIFI", amount: 15001 },
+    { month: "2026-09", type: "KHALA", amount: 4001 },
+  ];
+  const unevenCalc = computeMonth({
+    month: "2026-09",
+    finalize: true,
+    members: userMembers,
+    rooms: userRooms,
+    changes: [],
+    guestMeals: [],
+    extras: [],
+    bills: unevenBills,
+    rateCards: [{ ...RATE_CARD, khalaNormalRate: 300, khalaSoloRate: 400 }],
+    soloElectricityMultiplier: 2,
+    soloWifiMultiplier: 1,
+    today: "2026-09-30",
+  });
+  const unevenPoolTotal = 600001 + 15001 + 4001;
+  const unevenSettlementTotal = [...unevenCalc.perMember.values()].reduce((acc, r) => acc + r.khalaElecWifiAmount, 0);
+  check("rounding distribution ensures uneven total (619,003) matches exactly", unevenSettlementTotal, unevenPoolTotal);
 }
 
 // ---------------------------------------------------------------------------

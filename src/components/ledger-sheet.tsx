@@ -82,9 +82,9 @@ export function LedgerSheet({
             <th>গেস্ট ফুল</th>
             <th>গেস্ট হাফ</th>
             <th>
-              ইউটিলিটি শেয়ার
+              খালা+ওয়াইফাই+বিদ্যুৎ
               <br />
-              (খালা+ওয়াইফাই+বিদ্যুৎ)
+              (Khala+Wifi+Electricity)
             </th>
             <th>
               এক্সট্রা

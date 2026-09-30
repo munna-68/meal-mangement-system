@@ -130,7 +130,7 @@ export function BalanceSheet({
             <th>নাম</th>
             <th>পূর্বের</th>
             <th>জমা</th>
-            <th>ইউটিলিটি</th>
+            <th>খালা+ওয়াইফাই+বিদ্যুৎ</th>
             <th>এক্সট্রা</th>
             <th>মোট খরচ</th>
             <th>ব্যালেন্স</th>
