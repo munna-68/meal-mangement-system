@@ -398,6 +398,44 @@ export const deposits = pgTable(
 );
 
 /**
+ * Money taken back out of a member's balance — a refund of an overpayment, or
+ * money handed to a member in hand of what they are owed.
+ *
+ * Deliberately *not* a negative deposit. Deposits stay meaning "money that came
+ * in", so every total built from them (cash reconciliation, the deposit page
+ * totals, the earliest-activity scan) keeps working unchanged. A deduction is
+ * the opposite direction and is subtracted instead: `balance = opening +
+ * deposits − cost − deductions`.
+ *
+ * `amount` is stored positive — the manager types how much to take out, never a
+ * minus sign — so a row can never be misread as a deposit by a future query.
+ * `createDeduction` refuses an amount larger than the member's current balance,
+ * which is why a deduction can never be what puts someone into deficit.
+ */
+export const deductions = pgTable(
+  "deductions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "cascade" }),
+    date: dateColumn("date").notNull(),
+    amount: integer("amount").notNull(),
+    notes: text("notes"),
+    /**
+     * A key generated once per submission in the browser and reused until the
+     * save succeeds, so a double-click cannot take the same money out twice.
+     */
+    idempotencyKey: varchar("idempotency_key", { length: 64 }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("deductions_member_idx").on(t.memberId, t.date),
+    uniqueIndex("deductions_idempotency_key_uq").on(t.idempotencyKey),
+  ],
+);
+
+/**
  * A manager-declared opening balance for a member for a specific month — the
  * position they started that month with ("balance as at the 1st").
  *
@@ -410,7 +448,8 @@ export const deposits = pgTable(
  *
  * `amount` is signed: positive means the member started in credit, negative
  * means they already owed the mess. This matches the ledger convention
- * `balance = opening + deposits − cost`, where a negative balance is a debt.
+ * `balance = opening + deposits − cost − deductions`, where a negative balance
+ * is a debt.
  */
 export const openingBalances = pgTable(
   "opening_balances",
@@ -520,6 +559,7 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   statusChanges: many(mealStatusChanges),
   guestMeals: many(guestMeals),
   deposits: many(deposits),
+  deductions: many(deductions),
   openingBalances: many(openingBalances),
   settlements: many(monthlySettlements),
 }));
@@ -559,6 +599,13 @@ export const bazarDutyRoomsRelations = relations(bazarDutyRooms, ({ one }) => ({
 export const depositsRelations = relations(deposits, ({ one }) => ({
   member: one(members, {
     fields: [deposits.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const deductionsRelations = relations(deductions, ({ one }) => ({
+  member: one(members, {
+    fields: [deductions.memberId],
     references: [members.id],
   }),
 }));

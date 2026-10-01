@@ -63,6 +63,9 @@ async function loadState(c: Client) {
   const deposits = (
     await c.query(`select id, member_id as "memberId", date::text as date, amount from deposits`)
   ).rows;
+  const deductions = (
+    await c.query(`select id, member_id as "memberId", date::text as date, amount from deductions`)
+  ).rows;
   const settlements: any[] = [];
   const openingBalances: any[] = [];
   const closedMonths: string[] = [];
@@ -87,6 +90,7 @@ async function loadState(c: Client) {
     members,
     rooms,
     deposits,
+    deductions,
     openingBalances: new Map(),
   });
   const sum = (f: (r: any) => number) => rows.reduce((t, r) => t + f(r), 0);
@@ -101,6 +105,11 @@ async function loadState(c: Client) {
       extrasPool: comp.extraPool.total,
       utilityPool: sum((r) => r.khalaElecWifiAmount),
       deposits: sum((r) => r.newDeposits),
+      // A deduction lowers the balance rather than appearing on the row, so it
+      // is totalled straight off the input rows.
+      deductions: deductions
+        .filter((d) => d.date.slice(0, 7) === MONTH)
+        .reduce((t, d) => t + d.amount, 0),
       balance: sum((r) => r.closingBalance),
     },
   };
@@ -113,6 +122,7 @@ async function main() {
   // Clean slate for August so the deltas are unambiguous.
   await c.query(`delete from extra_line_items where not is_auto and date::text like '2026-08-%'`);
   await c.query(`delete from deposits where date::text like '2026-08-%'`);
+  await c.query(`delete from deductions where date::text like '2026-08-%'`);
   await c.query(`delete from utility_bills where month::text like '2026-08%'`);
 
   const base = await loadState(c);
@@ -147,6 +157,31 @@ async function main() {
   await c.query(`delete from deposits where id=$1`, [d.id]);
   const afterDep = await loadState(c);
   check("deleting the deposit returns every total exactly", afterDep.totals, base.totals);
+
+  // ---------------------------------------------------------- I12.2b deduction
+  console.log("\n=== I12.2b  take money out, then put it back ===");
+  const [q] = (
+    await c.query(
+      `insert into deductions (member_id,date,amount) values ((select id from members where name='QA-C'),'2026-08-11',750) returning id`,
+    )
+  ).rows;
+  const withDed = await loadState(c);
+  check("taking out 750 records exactly 750 as deductions", withDed.totals.deductions - base.totals.deductions, 750);
+  check("the balance drops by exactly 750", withDed.totals.balance - base.totals.balance, -750);
+  check("the deposits total is untouched by a deduction", withDed.totals.deposits, base.totals.deposits);
+  await c.query(`delete from deductions where id=$1`, [q.id]);
+  const afterDed = await loadState(c);
+  check("deleting the deduction returns every total exactly", afterDed.totals, base.totals);
+
+  // A deduction dated in another month must not touch this one.
+  const [r2] = (
+    await c.query(
+      `insert into deductions (member_id,date,amount) values ((select id from members where name='QA-C'),'2026-09-11',999) returning id`,
+    )
+  ).rows;
+  const otherMonth = await loadState(c);
+  check("a deduction dated next month is excluded from this month", otherMonth.totals, base.totals);
+  await c.query(`delete from deductions where id=$1`, [r2.id]);
 
   // ----------------------------------------------------------------- I12.3 bill
   console.log("\n=== I12.3  save, edit and delete a utility bill ===");

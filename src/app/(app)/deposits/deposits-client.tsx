@@ -10,8 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { todayKey } from "@/lib/dates";
-import { formatTaka } from "@/lib/money";
-import { createDeposit, deleteDeposit } from "@/server/actions/ledger";
+import { formatSignedTaka, formatTaka } from "@/lib/money";
+import {
+  createDeduction,
+  createDeposit,
+  deleteDeduction,
+  deleteDeposit,
+} from "@/server/actions/ledger";
 
 export interface DepositRecord {
   id: string;
@@ -23,29 +28,86 @@ export interface DepositRecord {
   notes: string | null;
 }
 
+/** A deduction row has exactly the same shape as a deposit row. */
+export type DeductionRecord = DepositRecord;
+
 export interface DepositMemberOption {
   id: string;
   name: string;
   roomNumber: string;
   total: number;
+  /** Money already taken back out of this member's balance, all time. */
+  takenOut: number;
+}
+
+/** One line of the combined money ledger, in whichever direction it moved. */
+interface LedgerEntry {
+  id: string;
+  date: string;
+  roomNumber: string;
+  memberName: string;
+  notes: string | null;
+  kind: "deposit" | "deduction";
+  /** Positive for money in, negative for money taken out. */
+  signedAmount: number;
+  amount: number;
 }
 
 export function DepositsClient({
   members,
   deposits,
+  deductions,
 }: {
   members: DepositMemberOption[];
   deposits: DepositRecord[];
+  deductions: DeductionRecord[];
 }) {
   const { run, pending } = useAction();
   const idempotency = useIdempotencyKey();
-  const [memberId, setMemberId] = useState(members[0]?.id ?? "");
-  const [date, setDate] = useState(todayKey());
-  const [amount, setAmount] = useState("");
-  const [notes, setNotes] = useState("");
 
-  const selected = members.find((member) => member.id === memberId);
+  const [depositMemberId, setDepositMemberId] = useState(members[0]?.id ?? "");
+  const [depositDate, setDepositDate] = useState(todayKey());
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositNotes, setDepositNotes] = useState("");
+
+  const [outMemberId, setOutMemberId] = useState(members[0]?.id ?? "");
+  const [outDate, setOutDate] = useState(todayKey());
+  const [outAmount, setOutAmount] = useState("");
+  const [outNotes, setOutNotes] = useState("");
+
+  const selectedMember = members.find((member) => member.id === depositMemberId);
   const grandTotal = members.reduce((total, member) => total + member.total, 0);
+  const grandTakenOut = members.reduce(
+    (total, member) => total + member.takenOut,
+    0,
+  );
+
+  // One list, newest first. A deduction sorts in as a negative so the running
+  // order reads top-to-bottom as it happened rather than as two separate tables.
+  const ledger: LedgerEntry[] = [
+    ...deposits.map((entry) => ({
+      id: entry.id,
+      date: entry.date,
+      roomNumber: entry.roomNumber,
+      memberName: entry.memberName,
+      notes: entry.notes,
+      kind: "deposit" as const,
+      signedAmount: entry.amount,
+      amount: entry.amount,
+    })),
+    ...deductions.map((entry) => ({
+      id: entry.id,
+      date: entry.date,
+      roomNumber: entry.roomNumber,
+      memberName: entry.memberName,
+      notes: entry.notes,
+      kind: "deduction" as const,
+      signedAmount: -entry.amount,
+      amount: entry.amount,
+    })),
+  ].sort((a, b) =>
+    a.date === b.date ? a.kind.localeCompare(b.kind) : b.date.localeCompare(a.date),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,8 +128,8 @@ export function DepositsClient({
                 name: member.name,
                 roomNumber: member.roomNumber,
               }))}
-              value={memberId}
-              onChange={setMemberId}
+              value={depositMemberId}
+              onChange={setDepositMemberId}
             />
           </div>
           <div className="flex flex-col gap-2">
@@ -75,8 +137,8 @@ export function DepositsClient({
             <Input
               id="deposit-date"
               type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
+              value={depositDate}
+              onChange={(event) => setDepositDate(event.target.value)}
             />
           </div>
           <div className="flex flex-col gap-2">
@@ -86,8 +148,8 @@ export function DepositsClient({
               type="number"
               min={0}
               inputMode="numeric"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              value={depositAmount}
+              onChange={(event) => setDepositAmount(event.target.value)}
               placeholder="0"
             />
           </div>
@@ -95,28 +157,28 @@ export function DepositsClient({
             <Label htmlFor="deposit-notes">Notes</Label>
             <Input
               id="deposit-notes"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              value={depositNotes}
+              onChange={(event) => setDepositNotes(event.target.value)}
               placeholder="e.g. bkash"
             />
           </div>
           <Button
-            disabled={pending || !memberId || !amount}
+            disabled={pending || !depositMemberId || !depositAmount}
             onClick={() =>
               run(
                 () =>
                   createDeposit({
-                    memberId,
-                    date,
-                    amount,
-                    notes,
+                    memberId: depositMemberId,
+                    date: depositDate,
+                    amount: depositAmount,
+                    notes: depositNotes,
                     idempotencyKey: idempotency.current(),
                   }),
                 {
                   onSuccess: () => {
                     idempotency.reset();
-                    setAmount("");
-                    setNotes("");
+                    setDepositAmount("");
+                    setDepositNotes("");
                   },
                 },
               )
@@ -128,43 +190,136 @@ export function DepositsClient({
       </section>
 
       <section className="rounded-xl border bg-card shadow-sm">
-        <header className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-heading text-sm font-semibold">Totals per member</h2>
-          <span className="text-sm font-semibold tabular-nums">
-            {formatTaka(grandTotal)}
-          </span>
+        <header className="border-b px-4 py-3">
+          <h2 className="font-heading text-sm font-semibold">Take money out</h2>
+          <p className="text-xs text-muted-foreground">
+            Money handed back to a member, or refunded. Enter the amount to take
+            out — it comes off their balance, and you cannot take out more than
+            they have in hand.
+          </p>
         </header>
-        <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
-          {members.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center justify-between rounded-lg border px-3 py-2"
-            >
-              <span className="text-sm">
-                <span className="font-medium">{member.name}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  Room {member.roomNumber}
-                </span>
-              </span>
-              <span
-                className={
-                  member.total > 0
-                    ? "text-sm font-semibold tabular-nums"
-                    : "text-sm tabular-nums text-muted-foreground"
-                }
-              >
-                {formatTaka(member.total)}
-              </span>
-            </div>
-          ))}
+        <div className="grid gap-3 p-4 lg:grid-cols-[1.4fr_1fr_1fr_1.6fr_auto] lg:items-end">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="deduction-member">Member</Label>
+            <MemberPicker
+              id="deduction-member"
+              members={members.map((member) => ({
+                id: member.id,
+                name: member.name,
+                roomNumber: member.roomNumber,
+              }))}
+              value={outMemberId}
+              onChange={setOutMemberId}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="deduction-date">Date</Label>
+            <Input
+              id="deduction-date"
+              type="date"
+              value={outDate}
+              onChange={(event) => setOutDate(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="deduction-amount">Amount to take out</Label>
+            <Input
+              id="deduction-amount"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={outAmount}
+              onChange={(event) => setOutAmount(event.target.value)}
+              placeholder="0"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="deduction-notes">Notes</Label>
+            <Input
+              id="deduction-notes"
+              value={outNotes}
+              onChange={(event) => setOutNotes(event.target.value)}
+              placeholder="e.g. refund of extra"
+            />
+          </div>
+          <Button
+            variant="secondary"
+            disabled={pending || !outMemberId || !outAmount}
+            onClick={() =>
+              run(
+                () =>
+                  createDeduction({
+                    memberId: outMemberId,
+                    date: outDate,
+                    amount: outAmount,
+                    notes: outNotes,
+                    idempotencyKey: idempotency.current(),
+                  }),
+                {
+                  onSuccess: () => {
+                    idempotency.reset();
+                    setOutAmount("");
+                    setOutNotes("");
+                  },
+                },
+              )
+            }
+          >
+            Take money out
+          </Button>
         </div>
       </section>
 
       <section className="rounded-xl border bg-card shadow-sm">
         <header className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-heading text-sm font-semibold">Deposit ledger</h2>
+          <h2 className="font-heading text-sm font-semibold">
+            Totals per member
+          </h2>
+          <span className="text-sm font-semibold tabular-nums">
+            {formatSignedTaka(grandTotal - grandTakenOut)}
+          </span>
+        </header>
+        <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          {members.map((member) => {
+            const net = member.total - member.takenOut;
+            return (
+              <div
+                key={member.id}
+                className="flex items-center justify-between rounded-lg border px-3 py-2"
+              >
+                <span className="text-sm">
+                  <span className="font-medium">{member.name}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    Room {member.roomNumber}
+                  </span>
+                </span>
+                <span className="flex items-baseline gap-2">
+                  {member.takenOut > 0 ? (
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      −{formatTaka(member.takenOut)}
+                    </span>
+                  ) : null}
+                  <span
+                    className={
+                      net > 0
+                        ? "text-sm font-semibold tabular-nums"
+                        : "text-sm tabular-nums text-muted-foreground"
+                    }
+                  >
+                    {formatTaka(net)}
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-xl border bg-card shadow-sm">
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="font-heading text-sm font-semibold">Money ledger</h2>
           <span className="text-xs text-muted-foreground">
-            {deposits.length} entries
+            {ledger.length} entries
           </span>
         </header>
         <div className="overflow-x-auto">
@@ -180,42 +335,71 @@ export function DepositsClient({
               </tr>
             </thead>
             <tbody>
-              {deposits.map((deposit) => (
-                <tr key={deposit.id} className="border-t">
-                  <td className="px-4 py-2 tabular-nums">{deposit.date}</td>
-                  <td className="px-4 py-2 tabular-nums">{deposit.roomNumber}</td>
-                  <td className="px-4 py-2 font-medium">{deposit.memberName}</td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {deposit.notes ?? "—"}
+              {ledger.map((entry) => (
+                <tr key={entry.id}>
+                  <td className="border-t px-4 py-2 tabular-nums">
+                    {entry.date}
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold tabular-nums">
-                    {formatTaka(deposit.amount)}
+                  <td className="border-t px-4 py-2 tabular-nums">
+                    {entry.roomNumber}
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="border-t px-4 py-2 font-medium">
+                    {entry.memberName}
+                  </td>
+                  <td className="border-t px-4 py-2 text-muted-foreground">
+                    {entry.notes ?? "—"}
+                  </td>
+                  <td
+                    className={
+                      entry.signedAmount < 0
+                        ? "border-t px-4 py-2 text-right font-semibold tabular-nums text-destructive"
+                        : "border-t px-4 py-2 text-right font-semibold tabular-nums"
+                    }
+                  >
+                    {formatSignedTaka(entry.signedAmount)}
+                  </td>
+                  <td className="border-t px-4 py-2 text-right">
                     <Button
                       size="icon-sm"
                       variant="ghost"
-                      aria-label="Delete deposit"
-                      onClick={() => run(() => deleteDeposit(deposit.id))}
+                      aria-label={
+                        entry.kind === "deposit"
+                          ? "Delete deposit"
+                          : "Delete deduction"
+                      }
+                      onClick={() =>
+                        run(() =>
+                          entry.kind === "deposit"
+                            ? deleteDeposit(entry.id)
+                            : deleteDeduction(entry.id),
+                        )
+                      }
                     >
                       <TrashIcon />
                     </Button>
                   </td>
                 </tr>
               ))}
-              {deposits.length === 0 ? (
+              {ledger.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                    No deposits recorded yet.
+                  <td
+                    colSpan={6}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
+                    No money recorded yet.
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-        {selected && selected.total > 0 ? (
+        {selectedMember && selectedMember.total > 0 ? (
           <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-            {selected.name} has deposited {formatTaka(selected.total)} in total.
+            {selectedMember.name} has deposited {formatTaka(selectedMember.total)}{" "}
+            in total
+            {selectedMember.takenOut > 0
+              ? `, and ${formatTaka(selectedMember.takenOut)} has been taken back out.`
+              : "."}
           </p>
         ) : null}
       </section>

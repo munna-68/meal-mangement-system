@@ -67,6 +67,7 @@ export interface MemberUnclosedHistory {
   statusChanges: number;
   guestMeals: number;
   deposits: number;
+  deductions: number;
 }
 
 export interface MemberRecord {
@@ -321,10 +322,10 @@ function DeleteButton({
 }
 
 /**
- * Deleting a member cascades to their meal status changes, guest meals and
- * deposits. Anything in a month that is still open would silently rewrite that
- * month's totals, so the dialog spells out exactly what would be lost and the
- * server refuses the delete unless the loss is confirmed.
+ * Deleting a member cascades to their meal status changes, guest meals,
+ * deposits and deductions. Anything in a month that is still open would silently
+ * rewrite that month's totals, so the dialog spells out exactly what would be
+ * lost and the server refuses the delete unless the loss is confirmed.
  */
 function MemberDeleteButton({ member }: { member: MemberRecord }) {
   const { run, pending } = useAction();
@@ -340,6 +341,9 @@ function MemberDeleteButton({ member }: { member: MemberRecord }) {
       : null,
     losses.deposits > 0
       ? `${losses.deposits} deposit${losses.deposits === 1 ? "" : "s"}`
+      : null,
+    losses.deductions > 0
+      ? `${losses.deductions} deduction${losses.deductions === 1 ? "" : "s"}`
       : null,
   ].filter((value): value is string => value !== null);
 

@@ -50,6 +50,13 @@
       "when": 1790802386854,
       "tag": "0006_khala_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790868207613,
+      "tag": "0007_left_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

@@ -42,6 +42,7 @@ function stubbedSource(file: string): string {
   src = src.replace(/import \{ getMemberNames \} from "@\/server\/queries";\n?/g, "");
   src = src.replace(/import \{ getMemberHistoryLosses \} from "@\/server\/queries";\n?/g, "");
   src = src.replace(/import \{ ensureAutoExtrasForDate[^\n]*\n?/g, "");
+  src = src.replace(/import \{ ensureAutoExtrasForMonth \} from "@\/server\/auto-extras";\n?/g, "");
   src = src.replace(/import \{ getRateCards, loadLedgerSnapshot \} from "@\/server\/queries";\n?/g, "");
   src = src.replace(/import \{ getRateCards \} from "@\/server\/queries";\n?/g, "");
   src = src.replace(/import \{ loadLedgerSnapshot \} from "@\/server\/queries";\n?/g, "");
@@ -65,7 +66,29 @@ const monthKeyLockError = async (_m: any) => null;
 const openingMonthError = async (_m: any) => null;
 const getMemberNames = async (ids: string[]) => new Map(ids.map((i) => [i, "QA-A"]));
 const getRateCards = async () => ([] as any[]);
-const loadLedgerSnapshot = async () => ({ members: [], rooms: [], changes: [], guestMeals: [], extras: [], rateCards: [], today: "2026-09-30", settings: { soloElectricityMultiplier: 2, soloWifiMultiplier: 1, ramadanMode: false } });
+const ensureAutoExtrasForMonth = async (_m: string) => {};
+// A snapshot complete enough for computeRunningBalances to run for real, which
+// is what createDeduction's overdraft guard depends on. Member "x" deposited
+// 1,000 and has no meals, extras or bills, so its live balance is exactly 1,000
+// — which makes the overdraft boundary a known quantity for the cases below.
+const loadLedgerSnapshot = async () => ({
+  members: [{ id: "x", name: "QA-A", roomId: "r1", active: true, joinDate: "2026-09-01", leaveDate: null }],
+  rooms: [{ id: "r1", number: "A1", capacity: 3, solo: false }],
+  changes: [],
+  guestMeals: [],
+  extras: [],
+  bills: [],
+  khalaPayments: [],
+  rateCards: [],
+  deposits: [{ memberId: "x", date: "2026-09-10", amount: 1000 }],
+  deductions: [],
+  settlements: [],
+  openingBalances: [],
+  lastClosedMonth: null,
+  today: "2026-09-30",
+  currentMonth: "2026-09",
+  settings: { soloElectricityMultiplier: 2, soloWifiMultiplier: 1, ramadanMode: false },
+});
 const insertAutoExtraRows = async () => 0;
 const pendingAutoExtraRows = () => [];
 const autoExtraRowsFor = () => [];
@@ -206,6 +229,24 @@ async function main() {
   for (const c of depCases) {
     recorder.reset();
     const r = await ledger.createDeposit(c.input as any);
+    verdict(c.label, c.expect, r as any, recorder.inserts.length + recorder.audits.length > 0);
+  }
+
+  console.log("\n=== DEDUCTION amount (createDeduction) ===");
+  // Member "x" is stubbed with a live balance of exactly 1,000.
+  const dedCases: Case[] = [
+    { action: "createDeduction", label: "zero", input: { memberId: "x", date: "2026-09-20", amount: 0 }, expect: "REJECTED" },
+    { action: "createDeduction", label: "negative", input: { memberId: "x", date: "2026-09-20", amount: -500 }, expect: "REJECTED" },
+    { action: "createDeduction", label: "decimal", input: { memberId: "x", date: "2026-09-20", amount: 100.5 }, expect: "REJECTED" },
+    { action: "createDeduction", label: "exactly the balance (1,000)", input: { memberId: "x", date: "2026-09-20", amount: 1000 }, expect: "ACCEPTED" },
+    { action: "createDeduction", label: "one taka over the balance (1,001)", input: { memberId: "x", date: "2026-09-20", amount: 1001 }, expect: "REJECTED" },
+    { action: "createDeduction", label: "far over the balance (99,000)", input: { memberId: "x", date: "2026-09-20", amount: 99000 }, expect: "REJECTED" },
+    { action: "createDeduction", label: "no memberId", input: { date: "2026-09-20", amount: 100 }, expect: "REJECTED" },
+    { action: "createDeduction", label: "notes too long (301)", input: { memberId: "x", date: "2026-09-20", amount: 100, notes: "n".repeat(301) }, expect: "REJECTED" },
+  ];
+  for (const c of dedCases) {
+    recorder.reset();
+    const r = await ledger.createDeduction(c.input as any);
     verdict(c.label, c.expect, r as any, recorder.inserts.length + recorder.audits.length > 0);
   }
 

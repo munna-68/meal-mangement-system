@@ -10,6 +10,7 @@ import {
 import { formatTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import {
+  getDeductions,
   getDeposits,
   getLastClosedMonth,
   getMembersWithRooms,
@@ -18,7 +19,11 @@ import {
 import {
   CsvImportSection,
 } from "./csv-import-section";
-import { DepositsClient, type DepositRecord } from "./deposits-client";
+import {
+  DepositsClient,
+  type DeductionRecord,
+  type DepositRecord,
+} from "./deposits-client";
 import {
   OpeningBalancesSection,
   type OpeningRecord,
@@ -29,12 +34,14 @@ export const metadata: Metadata = { title: "Deposits" };
 export default async function DepositsPage() {
   await requireSession();
 
-  const [members, deposits, openingRows, lastClosedMonth] = await Promise.all([
-    getMembersWithRooms(),
-    getDeposits(),
-    getOpeningBalances(),
-    getLastClosedMonth(),
-  ]);
+  const [members, deposits, deductionRows, openingRows, lastClosedMonth] =
+    await Promise.all([
+      getMembersWithRooms(),
+      getDeposits(),
+      getDeductions(),
+      getOpeningBalances(),
+      getLastClosedMonth(),
+    ]);
 
   const memberById = new Map(members.map((member) => [member.id, member]));
 
@@ -71,6 +78,19 @@ export default async function DepositsPage() {
     };
   });
 
+  const deductionRecords: DeductionRecord[] = deductionRows.map((deduction) => {
+    const member = memberById.get(deduction.memberId);
+    return {
+      id: deduction.id,
+      memberId: deduction.memberId,
+      memberName: member?.name ?? "Unknown",
+      roomNumber: member?.roomNumber ?? "-",
+      date: deduction.date,
+      amount: deduction.amount,
+      notes: deduction.notes,
+    };
+  });
+
   const options = members
     .filter((member) => member.active)
     .map((member) => ({
@@ -80,9 +100,16 @@ export default async function DepositsPage() {
       total: deposits
         .filter((deposit) => deposit.memberId === member.id)
         .reduce((total, deposit) => total + deposit.amount, 0),
+      takenOut: deductionRows
+        .filter((deduction) => deduction.memberId === member.id)
+        .reduce((total, deduction) => total + deduction.amount, 0),
     }));
 
   const total = deposits.reduce((sum, deposit) => sum + deposit.amount, 0);
+  const takenOutTotal = deductionRows.reduce(
+    (sum, deduction) => sum + deduction.amount,
+    0,
+  );
   const month = currentMonthKey();
   const thisMonth = deposits
     .filter((deposit) => deposit.date.slice(0, 7) === month)
@@ -92,10 +119,15 @@ export default async function DepositsPage() {
     <>
       <PageHeader
         title="Deposits"
-        description="Everything members have paid in, and what is still outstanding."
+        description="Everything members have paid in, what has been taken back out, and what is still outstanding."
       />
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="All-time deposits" value={formatTaka(total)} />
+        <Stat
+          label="All-time taken out"
+          value={formatTaka(takenOutTotal)}
+          hint="money handed back"
+        />
         <Stat
           label={`This month (${formatMonthDisplay(month)})`}
           value={formatTaka(thisMonth)}
@@ -107,7 +139,11 @@ export default async function DepositsPage() {
         />
       </div>
       <div className="flex flex-col gap-6">
-        <DepositsClient members={options} deposits={records} />
+        <DepositsClient
+          members={options}
+          deposits={records}
+          deductions={deductionRecords}
+        />
         <OpeningBalancesSection
           members={options}
           openings={openings}

@@ -6,12 +6,13 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import {
+  deductions,
   deposits,
   extraLineItems,
   khalaPayments,
   utilityBills,
 } from "@/db/schema";
-import { apportionKhala, rateCardFor } from "@/lib/calc";
+import { apportionKhala, computeRunningBalances, rateCardFor } from "@/lib/calc";
 import {
   fail,
   firstIssue,
@@ -28,6 +29,7 @@ import {
   monthStart,
 } from "@/lib/dates";
 import { formatTaka, sum } from "@/lib/money";
+import { ensureAutoExtrasForMonth } from "@/server/auto-extras";
 import { requireSession } from "@/server/auth";
 import { recordAudit } from "@/server/audit";
 import { monthKeyLockError, monthLockError } from "@/server/month-lock";
@@ -593,4 +595,187 @@ export async function deleteDeposit(id: string): Promise<ActionResult> {
   }
   refresh();
   return ok("Deposit deleted");
+}
+
+/**
+ * Money taken back out of a member's balance.
+ *
+ * `takaAmount(1)` is the whole-taka, strictly-positive guarantee: the manager
+ * types how much to take out and can never type a minus sign, so a deduction
+ * row cannot be mistaken for a deposit by any later query.
+ */
+const deductionSchema = z.object({
+  memberId: z.string().min(1, "Pick a member"),
+  date: z.string().refine(isValidDateKey, "Pick a valid date"),
+  amount: takaAmount(1),
+  notes: z.string().max(300).optional(),
+  /**
+   * Generated once per submission in the browser and reused until the save
+   * succeeds, so a double-click cannot take the same money out twice.
+   */
+  idempotencyKey: z.string().max(64).optional(),
+});
+
+/**
+ * What the member currently has in hand, priced exactly as the Balances page
+ * prices it — the same engine, the same inputs, the same open period.
+ *
+ * The recurring daily costs are materialised first, because they are rows in
+ * `extra_line_items`: without them the month-to-date cost is understated, the
+ * balance comes out too high, and the guard below would let more out than the
+ * member actually has.
+ *
+ * Returns null when the member is not in the ledger at all.
+ */
+async function liveBalanceFor(memberId: string): Promise<number | null> {
+  const snapshot = await loadLedgerSnapshot();
+  await ensureAutoExtrasForMonth(monthOf(snapshot.today));
+
+  const result = computeRunningBalances({
+    members: snapshot.members,
+    rooms: snapshot.rooms,
+    changes: snapshot.changes,
+    guestMeals: snapshot.guestMeals,
+    extras: snapshot.extras,
+    bills: snapshot.bills,
+    khalaPayments: snapshot.khalaPayments,
+    rateCards: snapshot.rateCards,
+    deposits: snapshot.deposits,
+    deductions: snapshot.deductions,
+    settlements: snapshot.settlements,
+    openingBalances: snapshot.openingBalances,
+    lastClosedMonth: snapshot.lastClosedMonth,
+    ramadanMode: snapshot.settings.ramadanMode,
+    soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
+    soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
+    today: snapshot.today,
+  });
+
+  const row = result.rows.find((candidate) => candidate.memberId === memberId);
+  return row ? row.balance : null;
+}
+
+export async function createDeduction(
+  input: z.input<typeof deductionSchema>,
+): Promise<ActionResult> {
+  const actor = await requireSession();
+  const parsed = deductionSchema.safeParse(input);
+  if (!parsed.success) return fail(firstIssue(parsed.error, "Invalid deduction"));
+  if (parsed.data.amount <= 0) {
+    return fail("Enter how much to take out, as a whole number of taka.");
+  }
+
+  const locked = await monthLockError([parsed.data.date]);
+  if (locked) return fail(locked);
+
+  try {
+    const names = await getMemberNames([parsed.data.memberId]);
+    const memberName = names.get(parsed.data.memberId) ?? parsed.data.memberId;
+
+    // Only ever take out money the member actually has. The guard reads the
+    // same figure the Balances screen shows, so what the manager can see is
+    // exactly what they are allowed to remove — and a second deduction after the
+    // first is measured against the balance the first one left.
+    const available = await liveBalanceFor(parsed.data.memberId);
+    if (available === null) {
+      return fail("That member is not in the ledger, so there is no balance to take from.");
+    }
+    if (parsed.data.amount > available) {
+      return fail(
+        available <= 0
+          ? `${memberName} has ${formatTaka(available)} in hand, so nothing can be taken out.`
+          : `${memberName} has only ${formatTaka(available)} in hand, so ${formatTaka(
+              parsed.data.amount,
+            )} cannot be taken out. Reduce it to ${formatTaka(available)} or less.`,
+      );
+    }
+
+    const { idempotencyKey, ...values } = parsed.data;
+
+    await db.transaction(async (tx) => {
+      // The unique index on `idempotency_key` means the second of two clicks
+      // that raced each other simply inserts nothing.
+      const inserted = await tx
+        .insert(deductions)
+        .values({
+          ...values,
+          notes: values.notes?.trim() || null,
+          idempotencyKey: idempotencyKey || null,
+        })
+        .onConflictDoNothing({ target: deductions.idempotencyKey })
+        .returning({ id: deductions.id });
+
+      if (inserted.length === 0) return;
+
+      await recordAudit(
+        {
+          actor,
+          action: "deduction.create",
+          entityType: "member",
+          entityId: parsed.data.memberId,
+          summary: `Took ${formatTaka(parsed.data.amount)} out of ${memberName}'s balance on ${
+            parsed.data.date
+          }`,
+          detail: {
+            date: parsed.data.date,
+            amount: parsed.data.amount,
+            balanceBefore: available,
+          },
+        },
+        tx,
+      );
+    });
+  } catch (error) {
+    return fail(firstIssue(error, "Could not take the money out"));
+  }
+  refresh();
+  return ok("Money taken out");
+}
+
+export async function deleteDeduction(id: string): Promise<ActionResult> {
+  const actor = await requireSession();
+  try {
+    const [existing] = await db
+      .select({
+        memberId: deductions.memberId,
+        date: deductions.date,
+        amount: deductions.amount,
+      })
+      .from(deductions)
+      .where(eq(deductions.id, id))
+      .limit(1);
+    if (!existing) return fail("That deduction no longer exists.");
+
+    const locked = await monthLockError([existing.date]);
+    if (locked) return fail(locked);
+
+    const names = await getMemberNames([existing.memberId]);
+    const memberName = names.get(existing.memberId) ?? existing.memberId;
+
+    await db.transaction(async (tx) => {
+      await tx.delete(deductions).where(eq(deductions.id, id));
+
+      await recordAudit(
+        {
+          actor,
+          action: "deduction.delete",
+          entityType: "member",
+          entityId: existing.memberId,
+          summary: `Deleted a ${formatTaka(existing.amount)} deduction for ${memberName} dated ${
+            existing.date
+          }`,
+          detail: {
+            date: existing.date,
+            amount: existing.amount,
+            month: monthOf(existing.date),
+          },
+        },
+        tx,
+      );
+    });
+  } catch (error) {
+    return fail(firstIssue(error, "Could not delete the deduction"));
+  }
+  refresh();
+  return ok("Deduction deleted");
 }

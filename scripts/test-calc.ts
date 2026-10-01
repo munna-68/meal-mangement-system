@@ -30,6 +30,7 @@ import {
   type UtilityBillData,
   type KhalaPaymentData,
   type DepositData,
+  type DeductionData,
 } from "../src/lib/calc";
 import {
   autoExtraRowsFor,
@@ -786,6 +787,205 @@ section("Monthly computation");
     ...computation.perMember.values(),
   ].every((r) => r.extraAmount === 375), true);
   check("4 active members", computation.activeMemberIds.length, 4);
+}
+
+// ---------------------------------------------------------------------------
+// Taking money out
+// ---------------------------------------------------------------------------
+
+section("Taking money out (deductions)");
+{
+  const computation = computeMonth({
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: MARCH_EXTRAS,
+    bills: BILLS,
+    khalaPayments: MARCH_KHALA,
+    rateCards: [RATE_CARD],
+    today: "2025-03-31",
+  });
+
+  const deposits: DepositData[] = [
+    { memberId: "m1", date: "2025-03-02", amount: 5000 },
+  ];
+
+  const settle = (deductions: DeductionData[], opening = new Map<string, number>()) =>
+    buildSettlementRows({
+      computation,
+      members: MEMBERS,
+      rooms: ROOMS,
+      deposits,
+      deductions,
+      openingBalances: opening,
+    });
+
+  // The headline case: a member holding 1,000 has 100 taken out and is left 900.
+  {
+    const rows = settle([], new Map([["m1", 1000]]));
+    const before = rows.find((r) => r.memberId === "m1")!;
+    check("before: m1 is 1,000 + 5,000 − 2,860", before.closingBalance, 3140);
+
+    const after = settle(
+      [{ memberId: "m1", date: "2025-03-20", amount: 100 }],
+      new Map([["m1", 1000]]),
+    ).find((r) => r.memberId === "m1")!;
+    check("taking out 100 leaves 900 of the 1,000 opening", after.openingBalance + after.newDeposits - after.totalCost - 100, after.closingBalance);
+    check("balance = opening + deposits − cost − deductions", after.closingBalance, 1000 + 5000 - 2860 - 100);
+    check("the deduction did not touch the deposits column", after.newDeposits, 5000);
+    check("the deduction did not touch the cost column", after.totalCost, before.totalCost);
+  }
+
+  // An isolated 1,000 balance with nothing owed: 1,000 − 100 = 900 exactly.
+  // A zeroed rate card is what makes the cost zero, so the balance in hand is
+  // precisely the opening figure and nothing else muddies it.
+  {
+    const FREE: RateCardData = {
+      ...RATE_CARD,
+      fullMealRate: 0,
+      halfMealRate: 0,
+      guestFullRate: 0,
+      guestHalfRate: 0,
+      sehriRate: 0,
+      feastFlatCharge: 0,
+      khalaNormalRate: 0,
+      khalaSoloRate: 0,
+      managerDailyFee: 0,
+      dailyExtraAmount: 0,
+    };
+    const free = computeMonth({
+      month: "2025-03",
+      members: MEMBERS,
+      rooms: ROOMS,
+      changes: FULL_FROM_MARCH_1,
+      guestMeals: [],
+      extras: [],
+      bills: [],
+      khalaPayments: [],
+      rateCards: [FREE],
+      today: "2025-03-31",
+    });
+    const held = buildSettlementRows({
+      computation: free,
+      members: MEMBERS,
+      rooms: ROOMS,
+      deposits: [],
+      deductions: [{ memberId: "m1", date: "2025-03-20", amount: 100 }],
+      openingBalances: new Map([["m1", 1000]]),
+    }).find((r) => r.memberId === "m1")!;
+    check("the member really is owed nothing first", held.totalCost, 0);
+    check("1,000 in hand, 100 taken out, is exactly 900", held.closingBalance, 900);
+  }
+
+  // Taking out the whole balance lands on exactly zero, not below it.
+  {
+    const rows = settle(
+      [{ memberId: "m1", date: "2025-03-20", amount: 3140 }],
+      new Map([["m1", 1000]]),
+    );
+    check("taking out the whole balance lands on zero, not below", rows.find((r) => r.memberId === "m1")!.closingBalance, 0);
+  }
+
+  // Omitting the input entirely must match passing an empty list, so every
+  // caller written before deductions existed keeps its old behaviour.
+  check(
+    "omitting deductions matches passing an empty list",
+    settle([]),
+    buildSettlementRows({
+      computation,
+      members: MEMBERS,
+      rooms: ROOMS,
+      deposits,
+      openingBalances: new Map(),
+    }),
+  );
+
+  // Dated rows accumulate; they are not last-write-wins.
+  {
+    const rows = settle([
+      { memberId: "m1", date: "2025-03-10", amount: 300 },
+      { memberId: "m1", date: "2025-03-11", amount: 700 },
+    ]);
+    check("two deductions on consecutive days both count", 5000 - 2860 - 1000, rows.find((r) => r.memberId === "m1")!.closingBalance);
+  }
+
+  // A member's deduction must not touch anybody else.
+  {
+    const withM1 = settle([{ memberId: "m1", date: "2025-03-20", amount: 500 }]);
+    const plain = settle([]);
+    check("m1 is 500 lower", plain.find((r) => r.memberId === "m1")!.closingBalance - withM1.find((r) => r.memberId === "m1")!.closingBalance, 500);
+    check("m2 is untouched", withM1.find((r) => r.memberId === "m2")!.closingBalance, plain.find((r) => r.memberId === "m2")!.closingBalance);
+  }
+
+  // Dated outside the month it must not appear at all.
+  {
+    const rows = settle([
+      { memberId: "m1", date: "2025-04-01", amount: 5000 },
+      { memberId: "m1", date: "2025-02-28", amount: 5000 },
+    ]);
+    check("a deduction outside the month is excluded", rows.find((r) => r.memberId === "m1")!.closingBalance, 5000 - 2860);
+  }
+
+  // Carrying a post-deduction closing balance forward is what the next month
+  // opens on, so the reduction must not be quietly undone.
+  {
+    const withDeduction = settle([{ memberId: "m1", date: "2025-03-20", amount: 600 }]);
+    const carried = buildSettlementRows({
+      computation,
+      members: MEMBERS,
+      rooms: ROOMS,
+      deposits: [],
+      deductions: [],
+      openingBalances: new Map(withDeduction.map((r) => [r.memberId, r.closingBalance])),
+    });
+    check("the next month opens on the post-deduction balance", carried.find((r) => r.memberId === "m1")!.openingBalance, 5000 - 2860 - 600);
+  }
+
+  // The running balance used by the Balances page must agree.
+  {
+    const result = computeRunningBalances({
+      members: MEMBERS,
+      rooms: ROOMS,
+      changes: FULL_FROM_MARCH_1,
+      guestMeals: [],
+      extras: MARCH_EXTRAS,
+      bills: BILLS,
+      khalaPayments: MARCH_KHALA,
+      rateCards: [RATE_CARD],
+      deposits,
+      deductions: [{ memberId: "m1", date: "2025-03-20", amount: 250 }],
+      settlements: [],
+      openingBalances: [],
+      lastClosedMonth: null,
+      today: "2025-03-31",
+    });
+    const m1 = result.rows.find((r) => r.memberId === "m1")!;
+    check("running balance subtracts the deduction", m1.balance, 5000 - 2860 - 250);
+    check("running balance reports the deduction figure", m1.deductions, 250);
+    check("summary deductions total the rows", result.summary.deductions, 250);
+    check(
+      "summary balance = deposits − cost − deductions",
+      result.summary.balance,
+      result.summary.deposits - result.summary.cost - result.summary.deductions,
+    );
+  }
+
+  // Two deductions in a row must compound, not replace each other: 1,000 − 100
+  // = 900, then a further 100 leaves 800.
+  {
+    const first = settle([{ memberId: "m1", date: "2025-03-20", amount: 100 }]);
+    const second = settle([
+      { memberId: "m1", date: "2025-03-20", amount: 100 },
+      { memberId: "m1", date: "2025-03-21", amount: 100 },
+    ]);
+    check(
+      "a second 100 comes off the already-reduced balance",
+      first.find((r) => r.memberId === "m1")!.closingBalance - second.find((r) => r.memberId === "m1")!.closingBalance,
+      100,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

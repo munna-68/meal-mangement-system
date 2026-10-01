@@ -193,6 +193,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       members: snapshot.members,
       rooms: snapshot.rooms,
       deposits: snapshot.deposits,
+      deductions: snapshot.deductions,
       openingBalances,
     });
 

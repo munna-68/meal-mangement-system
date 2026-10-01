@@ -61,6 +61,7 @@ export default async function BalancesPage() {
       khalaPayments: snapshot.khalaPayments,
     rateCards: snapshot.rateCards,
     deposits: snapshot.deposits,
+    deductions: snapshot.deductions,
     settlements: snapshot.settlements,
     openingBalances: snapshot.openingBalances,
     lastClosedMonth: snapshot.lastClosedMonth,
@@ -102,7 +103,20 @@ export default async function BalancesPage() {
       .filter((bill) => bill.month >= result.periodStart.slice(0, 7))
       .map((bill) => bill.amount),
   );
-  const cashOut = bazarSpend + khalaPaid + extrasPaid + billsPaid;
+  // Money handed back to a member left the drawer just as surely as bazar spend
+// did, so it belongs on the out side. Leaving it out would overstate the float
+// by the total taken out.
+  const takenOut = sum(
+    snapshot.deductions
+      .filter(
+        (deduction) =>
+          deduction.date >= result.periodStart &&
+          deduction.date <= result.periodEnd,
+      )
+      .map((deduction) => deduction.amount),
+  );
+  const cashOut =
+    bazarSpend + khalaPaid + extrasPaid + billsPaid + takenOut;
   // Deposits are the only money that actually came in during the period. An
   // opening balance is a carried-forward debt or credit, not cash in the drawer,
   // so it is deliberately not counted here.
@@ -246,7 +260,7 @@ export default async function BalancesPage() {
 
       <SectionCard
         title="Per member"
-        description="Running balance = opening + deposits − month-to-date cost."
+        description="Running balance = opening + deposits − month-to-date cost − money taken out."
         contentClassName="p-0"
       >
         <div className="overflow-x-auto">

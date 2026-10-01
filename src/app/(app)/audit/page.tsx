@@ -14,6 +14,8 @@ const MONEY_ACTIONS = new Set([
   "bazar.confirm",
   "deposit.create",
   "deposit.delete",
+  "deduction.create",
+  "deduction.delete",
   "bill.save",
   "bill.delete",
   "extra.create",

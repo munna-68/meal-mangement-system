@@ -24,7 +24,7 @@
  *  - Utility pool = electricity + wifi + khala, apportioned by room capacity with
  *    a solo multiple for somebody alone in a multi-bed room.
  *  - Total cost = meals (incl. guests) + utility share + extras share.
- *  - Balance = opening + deposits − total cost.
+ *  - Balance = opening + deposits − total cost − deductions.
  */
 
 export type DateKey = string; // YYYY-MM-DD
@@ -524,6 +524,7 @@ export interface RefSettlementRow {
   memberId: string;
   opening: bigint;
   deposits: bigint;
+  deductions: bigint;
   cost: bigint;
   balance: bigint;
 }
@@ -533,6 +534,8 @@ export function refSettlement(
   input: {
     members: RefMember[];
     deposits: RefDeposit[];
+    /** Money taken back out. Same shape as a deposit, subtracted. */
+    deductions?: RefDeposit[];
     openingByMember: Map<string, bigint>;
   },
   today: DateKey,
@@ -540,14 +543,24 @@ export function refSettlement(
   const from = monthStart(month.month);
   return month.activeIds.map((id) => {
     const cost = month.perMember.get(id)!.totalCost;
-    const deposits = input.deposits
-      .filter(
-        (d) =>
-          d.memberId === id && cmp(d.date, from) >= 0 && cmp(d.date, month.cutoff) <= 0,
-      )
-      .reduce((t, d) => t + BigInt(d.amount), BigInt(0));
+    const sumInRange = (rows: RefDeposit[]) =>
+      rows
+        .filter(
+          (d) =>
+            d.memberId === id && cmp(d.date, from) >= 0 && cmp(d.date, month.cutoff) <= 0,
+        )
+        .reduce((t, d) => t + BigInt(d.amount), BigInt(0));
+    const deposits = sumInRange(input.deposits);
+    const deductions = sumInRange(input.deductions ?? []);
     const opening = input.openingByMember.get(id) ?? BigInt(0);
-    return { memberId: id, opening, deposits, cost, balance: opening + deposits - cost };
+    return {
+      memberId: id,
+      opening,
+      deposits,
+      deductions,
+      cost,
+      balance: opening + deposits - cost - deductions,
+    };
   });
 }
 

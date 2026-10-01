@@ -96,6 +96,7 @@ export async function closeMonth(
       extras: snapshot.extras,
       bills: snapshot.bills,
       khalaPayments: snapshot.khalaPayments,
+      deductions: snapshot.deductions,
       bazarDates: await getAllConfirmedBazarDates(),
     });
 
@@ -147,6 +148,7 @@ export async function closeMonth(
       members: snapshot.members,
       rooms: snapshot.rooms,
       deposits: snapshot.deposits,
+      deductions: snapshot.deductions,
       openingBalances,
     });
 

@@ -102,6 +102,20 @@ export interface DepositData {
 }
 
 /**
+ * Money taken back out of a member's balance on a given day.
+ *
+ * `amount` is always positive — the manager types how much to take out — and is
+ * *subtracted* from the balance. Storing it signed would make a deduction
+ * indistinguishable from a deposit to any query that does not look closely, so
+ * the direction lives in the table, not in the number.
+ */
+export interface DeductionData {
+  memberId: string;
+  date: DateKey;
+  amount: number;
+}
+
+/**
  * One dated instalment of khala actually paid to the khala lady. Khala is
  * collected in pieces across the month, so a month carries as many of these as
  * the manager made payments — including none at all, which means the members
@@ -945,8 +959,9 @@ export interface KhalaApportionment {
  * cannot know the month's khala on the 1st and must not charge for it in
  * advance. Each member therefore carries a share of what has genuinely been
  * paid, and nobody carries anything for a month where nothing has been paid.
- * That keeps `balance = opening + deposits − cost` an honest statement about
- * money: it never counts khala that is still sitting in the mess's hand.
+ * That keeps `balance = opening + deposits − cost − deductions` an honest
+ * statement about money: it never counts khala that is still sitting in the
+ * mess's hand.
  *
  * The split is weighted exactly as the rate card intends, so a solo member
  * carries the solo *proportion* of the paid khala. The shares always sum to
@@ -1391,9 +1406,18 @@ export function buildSettlementRows(input: {
   members: MemberData[];
   rooms: RoomData[];
   deposits: DepositData[];
+  /** Money taken out of a member's balance during the month. Absent means none. */
+  deductions?: DeductionData[];
   openingBalances: Map<string, number>;
 }): SettlementRow[] {
-  const { computation, members, rooms, deposits, openingBalances } = input;
+  const {
+    computation,
+    members,
+    rooms,
+    deposits,
+    deductions = [],
+    openingBalances,
+  } = input;
   const memberById = new Map(members.map((m) => [m.id, m]));
   const roomById = new Map(rooms.map((r) => [r.id, r]));
   const { from, cutoff } = computation;
@@ -1414,6 +1438,19 @@ export function buildSettlementRows(input: {
       );
       const openingBalance = openingBalances.get(memberId) ?? 0;
       const availableBalance = openingBalance + newDeposits;
+      // What actually left the member's hand this month. Subtracted from the
+      // closing balance rather than from `availableBalance`, so the "balance
+      // after deposit" line on the ledger keeps meaning money they paid in.
+      const newDeductions = sum(
+        deductions
+          .filter(
+            (deduction) =>
+              deduction.memberId === memberId &&
+              isSameOrAfter(deduction.date, from) &&
+              isSameOrBefore(deduction.date, cutoff),
+          )
+          .map((deduction) => deduction.amount),
+      );
       return {
         ...cost,
         memberId,
@@ -1422,7 +1459,7 @@ export function buildSettlementRows(input: {
         openingBalance,
         newDeposits,
         availableBalance,
-        closingBalance: availableBalance - cost.totalCost,
+        closingBalance: availableBalance - cost.totalCost - newDeductions,
       };
     })
     .sort((a, b) =>
@@ -1438,6 +1475,8 @@ export interface MemberRunningBalance {
   active: boolean;
   openingBalance: number;
   deposits: number;
+  /** Money taken back out of this member's balance in the open period. */
+  deductions: number;
   utilityCost: number;
   extraCost: number;
   cost: number;
@@ -1453,6 +1492,7 @@ export interface RunningBalanceResult {
   summary: {
     openingBalance: number;
     deposits: number;
+    deductions: number;
     utilityCost: number;
     extraCost: number;
     cost: number;
@@ -1480,6 +1520,8 @@ export function computeRunningBalances(input: {
   khalaPayments?: KhalaPaymentData[];
   rateCards: RateCardData[];
   deposits: DepositData[];
+  /** Money taken out of balances. Absent means none was. */
+  deductions?: DeductionData[];
   settlements: SettlementData[];
   /** Manager-declared opening balances, used to seed the first open month. */
   openingBalances: OpeningBalanceData[];
@@ -1499,6 +1541,7 @@ export function computeRunningBalances(input: {
     khalaPayments = [],
     rateCards,
     deposits,
+    deductions = [],
     settlements,
     openingBalances,
     lastClosedMonth,
@@ -1613,6 +1656,16 @@ export function computeRunningBalances(input: {
         )
         .map((deposit) => deposit.amount),
     );
+    const memberDeductions = sum(
+      deductions
+        .filter(
+          (deduction) =>
+            deduction.memberId === member.id &&
+            isSameOrAfter(deduction.date, periodStart) &&
+            isSameOrBefore(deduction.date, periodEnd),
+        )
+        .map((deduction) => deduction.amount),
+    );
     const utilityCost = utilityCostByMember.get(member.id) ?? 0;
     const extraCost = extraCostByMember.get(member.id) ?? 0;
     const cost = costByMember.get(member.id) ?? 0;
@@ -1623,10 +1676,11 @@ export function computeRunningBalances(input: {
       active: member.active,
       openingBalance,
       deposits: memberDeposits,
+      deductions: memberDeductions,
       utilityCost,
       extraCost,
       cost,
-      balance: openingBalance + memberDeposits - cost,
+      balance: openingBalance + memberDeposits - cost - memberDeductions,
     };
   });
 
@@ -1640,6 +1694,7 @@ export function computeRunningBalances(input: {
   const summary = {
     openingBalance: sum(rows.map((r) => r.openingBalance)),
     deposits: sum(rows.map((r) => r.deposits)),
+    deductions: sum(rows.map((r) => r.deductions)),
     utilityCost: sum(rows.map((r) => r.utilityCost)),
     extraCost: sum(rows.map((r) => r.extraCost)),
     cost: sum(rows.map((r) => r.cost)),

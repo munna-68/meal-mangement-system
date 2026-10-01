@@ -52,6 +52,7 @@ export default async function MembersPage() {
         statusChanges: loss?.statusChanges.unclosed ?? 0,
         guestMeals: loss?.guestMeals.unclosed ?? 0,
         deposits: loss?.deposits.unclosed ?? 0,
+        deductions: loss?.deductions.unclosed ?? 0,
       },
     };
   });

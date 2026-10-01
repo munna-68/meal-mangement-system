@@ -7,6 +7,7 @@
  * zero, 1 taka, and crore-scale numbers.
  */
 import type {
+  DeductionData,
   DepositData,
   ExtraItemData,
   GuestMealData,
@@ -290,6 +291,20 @@ export function makeScenario(seed: number, opts: { edge?: boolean } = {}): Scena
     deposits.push({ memberId: m.id, date, amount: rng.money() });
   }
 
+  // --- deductions (money taken back out). Generated in a second, independent
+  // pass so the invariants are checked against scenarios that actually contain
+  // them, rather than passing trivially on an empty list.
+  const deductions: DeductionData[] = [];
+  const deductionCount = edge ? rng.int(0, 2) : rng.int(0, 8);
+  for (let i = 0; i < deductionCount; i += 1) {
+    const m = rng.pick(members);
+    const month = rng.pick(months);
+    const [dy, dm] = month.split("-").map(Number);
+    const date = dayKey(dy, dm, rng.int(1, daysIn(dy, dm)));
+    if (date > today) continue;
+    deductions.push({ memberId: m.id, date, amount: rng.money("small") });
+  }
+
   // --- opening balances
   const openingBalances: OpeningBalanceData[] = [];
   for (const m of members) {
@@ -314,6 +329,7 @@ export function makeScenario(seed: number, opts: { edge?: boolean } = {}): Scena
     bills,
     rateCards,
     deposits,
+    deductions,
     openingBalances,
     settlements: [],
     lastClosedMonth: null,

@@ -6,6 +6,7 @@ import {
   bazarDuties,
   bazarDutyRooms,
   dailyBazarRecords,
+  deductions,
   deposits,
   extraLineItems,
   guestMeals,
@@ -21,6 +22,7 @@ import {
   utilityBills,
 } from "@/db/schema";
 import type {
+  DeductionData,
   DepositData,
   ExtraItemData,
   GuestMealData,
@@ -317,6 +319,21 @@ export async function getDeposits(): Promise<
     .orderBy(desc(deposits.date));
 }
 
+export async function getDeductions(): Promise<
+  (DeductionData & { id: string; notes: string | null })[]
+> {
+  return db
+    .select({
+      id: deductions.id,
+      memberId: deductions.memberId,
+      date: deductions.date,
+      amount: deductions.amount,
+      notes: deductions.notes,
+    })
+    .from(deductions)
+    .orderBy(desc(deductions.date));
+}
+
 export async function getSettlements(): Promise<SettlementData[]> {
   return db
     .select({
@@ -483,9 +500,10 @@ export interface MemberHistoryLoss {
   statusChanges: HistoryLoss;
   guestMeals: HistoryLoss;
   deposits: HistoryLoss;
+  deductions: HistoryLoss;
   /** Total records that sit in a month that has not been closed. */
   unclosedItems: number;
-  /** Distinct unclosed months across all three record types, oldest first. */
+  /** Distinct unclosed months across all four record types, oldest first. */
   unclosedMonths: MonthKey[];
   hasUnclosedHistory: boolean;
 }
@@ -496,6 +514,7 @@ function emptyLoss(): MemberHistoryLoss {
     statusChanges: empty,
     guestMeals: empty,
     deposits: empty,
+    deductions: empty,
     unclosedItems: 0,
     unclosedMonths: [],
     hasUnclosedHistory: false,
@@ -510,11 +529,12 @@ function emptyLoss(): MemberHistoryLoss {
 export async function getMemberHistoryLosses(): Promise<
   Map<string, MemberHistoryLoss>
 > {
-  const [closed, changes, guests, depositRows] = await Promise.all([
+  const [closed, changes, guests, depositRows, deductionRows] = await Promise.all([
     getClosedMonthSet(),
     getStatusChanges(),
     getGuestMeals(),
     getDeposits(),
+    getDeductions(),
   ]);
 
   const byMember = new Map<string, MemberHistoryLoss>();
@@ -522,7 +542,7 @@ export async function getMemberHistoryLosses(): Promise<
     memberId: string,
     kind: keyof Pick<
       MemberHistoryLoss,
-      "statusChanges" | "guestMeals" | "deposits"
+      "statusChanges" | "guestMeals" | "deposits" | "deductions"
     >,
     dates: DateKey[],
   ) => {
@@ -550,17 +570,22 @@ export async function getMemberHistoryLosses(): Promise<
   for (const [memberId, dates] of groupDates(depositRows)) {
     add(memberId, "deposits", dates);
   }
+  for (const [memberId, dates] of groupDates(deductionRows)) {
+    add(memberId, "deductions", dates);
+  }
 
   for (const entry of byMember.values()) {
     entry.unclosedItems =
       entry.statusChanges.unclosed +
       entry.guestMeals.unclosed +
-      entry.deposits.unclosed;
+      entry.deposits.unclosed +
+      entry.deductions.unclosed;
     entry.unclosedMonths = [
       ...new Set([
         ...entry.statusChanges.unclosedMonths,
         ...entry.guestMeals.unclosedMonths,
         ...entry.deposits.unclosedMonths,
+        ...entry.deductions.unclosedMonths,
       ]),
     ].sort();
     entry.hasUnclosedHistory = entry.unclosedItems > 0;
@@ -574,7 +599,7 @@ export async function getMemberHistoryLosses(): Promise<
  * open period begins when no month has been closed yet.
  */
 export async function getEarliestActivityDate(): Promise<DateKey | null> {
-  const [changes, guestRows, depositRows] = await Promise.all([
+  const [changes, guestRows, depositRows, deductionRows] = await Promise.all([
     db
       .select({ earliest: sql<string | null>`min(${mealStatusChanges.date})` })
       .from(mealStatusChanges),
@@ -584,12 +609,16 @@ export async function getEarliestActivityDate(): Promise<DateKey | null> {
     db
       .select({ earliest: sql<string | null>`min(${deposits.date})` })
       .from(deposits),
+    db
+      .select({ earliest: sql<string | null>`min(${deductions.date})` })
+      .from(deductions),
   ]);
 
   const candidates = [
     changes[0]?.earliest,
     guestRows[0]?.earliest,
     depositRows[0]?.earliest,
+    deductionRows[0]?.earliest,
   ].filter((value): value is DateKey => typeof value === "string" && value.length > 0);
 
   if (candidates.length === 0) return null;
@@ -741,6 +770,7 @@ export interface LedgerSnapshot {
   bills: UtilityBillData[];
   khalaPayments: (KhalaPaymentData & { id: string; notes: string | null })[];
   deposits: (DepositData & { id: string; notes: string | null })[];
+  deductions: (DeductionData & { id: string; notes: string | null })[];
   settlements: SettlementData[];
   openingBalances: OpeningBalanceData[];
   lastClosedMonth: MonthKey | null;
@@ -758,6 +788,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     bills,
     khalaPaymentRows,
     depositRows,
+    deductionRows,
     settlements,
     openingBalanceRows,
     lastClosedMonth,
@@ -772,6 +803,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     getUtilityBills(),
     getKhalaPayments(),
     getDeposits(),
+    getDeductions(),
     getSettlements(),
     getOpeningBalances(),
     getLastClosedMonth(),
@@ -790,6 +822,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     bills,
     khalaPayments: khalaPaymentRows,
     deposits: depositRows,
+    deductions: deductionRows,
     settlements,
     openingBalances: openingBalanceRows,
     lastClosedMonth,

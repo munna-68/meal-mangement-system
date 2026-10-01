@@ -704,6 +704,70 @@ sec("G — deposits and balances");
   });
   check("a deposit in the next month is not counted in this one", future.find((r) => r.memberId === "m1")!.newDeposits, 6_000);
   note("Deposits are append-only rows: submitting the same deposit twice records it twice. There is no idempotency key.");
+
+  // A deduction is money taken *out*. It is subtracted from the closing balance
+  // and never from the deposits column, which stays money-in only.
+  const base1 = rows.find((r) => r.memberId === "m1")!;
+  const withDeduction = buildSettlementRows({
+    computation: comp,
+    members: MEMBERS,
+    rooms: ROOMS,
+    deposits,
+    deductions: [{ memberId: "m1", date: "2026-09-20", amount: 1_000 }],
+    openingBalances: new Map(),
+  });
+  const d1 = withDeduction.find((r) => r.memberId === "m1")!;
+  check("a deduction lowers the closing balance by exactly its amount", base1.closingBalance - d1.closingBalance, 1_000);
+  check("a deduction leaves the deposits column alone", d1.newDeposits, base1.newDeposits);
+  check("a deduction leaves the cost alone", d1.totalCost, base1.totalCost);
+  check("balance = opening + deposits - cost - deductions", d1.closingBalance, 0 + 6_000 - d1.totalCost - 1_000);
+
+  // Two deductions on the same day accumulate rather than replacing.
+  const twoDeductions = buildSettlementRows({
+    computation: comp,
+    members: MEMBERS,
+    rooms: ROOMS,
+    deposits,
+    deductions: [
+      { memberId: "m1", date: "2026-09-20", amount: 300 },
+      { memberId: "m1", date: "2026-09-21", amount: 700 },
+    ],
+    openingBalances: new Map(),
+  });
+  check("two deductions both count", base1.closingBalance - twoDeductions.find((r) => r.memberId === "m1")!.closingBalance, 1_000);
+
+  // A deduction belonging to a different member must not touch this one.
+  check(
+    "a deduction for another member leaves this balance alone",
+    withDeduction.find((r) => r.memberId === "m2")!.closingBalance,
+    rows.find((r) => r.memberId === "m2")!.closingBalance,
+  );
+
+  // Dated outside the month.
+  const futureDeduction = buildSettlementRows({
+    computation: comp,
+    members: MEMBERS,
+    rooms: ROOMS,
+    deposits,
+    deductions: [{ memberId: "m1", date: "2026-10-01", amount: 5_000 }],
+    openingBalances: new Map(),
+  });
+  check(
+    "a deduction in the next month is not counted in this one",
+    futureDeduction.find((r) => r.memberId === "m1")!.closingBalance,
+    base1.closingBalance,
+  );
+
+  // Omitting the input entirely must behave the same as passing none, so every
+  // caller that predates deductions keeps working unchanged.
+  const omitted = buildSettlementRows({
+    computation: comp,
+    members: MEMBERS,
+    rooms: ROOMS,
+    deposits,
+    openingBalances: new Map(),
+  });
+  check("omitting deductions matches passing an empty list", omitted, rows);
 }
 
 // ===========================================================================

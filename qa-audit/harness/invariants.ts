@@ -16,6 +16,7 @@ import {
   extraPoolForRange,
   mealRegisterForMonth,
   rateCardFor,
+  type DeductionData,
   type DepositData,
   type ExtraItemData,
   type GuestMealData,
@@ -67,6 +68,8 @@ export interface Scenario {
   bills: UtilityBillData[];
   rateCards: RateCardData[];
   deposits: DepositData[];
+  /** Money taken back out of balances. Optional so a scenario may omit it. */
+  deductions?: DeductionData[];
   openingBalances: OpeningBalanceData[];
   settlements: SettlementData[];
   lastClosedMonth: string | null;
@@ -175,7 +178,7 @@ const INVARIANT_TITLES: Record<string, string> = {
   I2: "Σ member extras shares = Extras pool total exactly",
   I3: "Σ member utility shares = Utility pool total exactly",
   I4: "per member: cost = meals + guest + extras + utility; Σ cost = overall total",
-  I5: "per member: balance = opening + deposits − cost; Σ balance = Σ deposits − Σ cost",
+  I5: "per member: balance = opening + deposits − cost − deductions; Σ balance = Σ deposits − Σ cost − Σ deductions",
   I6: "the same figure is identical on Settlement, Balances, pools and ledger",
   I7: "register full/half = settlement full/half = daily statuses",
   I8: "guest counts in settlement = guest counts in Meal Status = guest charges",
@@ -253,6 +256,7 @@ export function checkScenario(s: Scenario): ScenarioReport {
       members: s.members,
       rooms: s.rooms,
       deposits: s.deposits,
+      deductions: s.deductions ?? [],
       // Resolved exactly the way the Settlement page resolves it, so the
       // cross-page comparison below is between the real pages.
       openingBalances: openingBalancesFor({
@@ -396,29 +400,58 @@ export function checkScenario(s: Scenario): ScenarioReport {
 
     // ---------------- I5: balance identity
     {
+      // `SettlementRow` nets deductions into the closing balance rather than
+      // exposing them, so they are re-derived here from the scenario's own
+      // rows — which is the point: the row's balance must account for every
+      // deduction dated inside the month.
+      const deductionsInMonth = (memberId: string) =>
+        (s.deductions ?? [])
+          .filter(
+            (d) => d.memberId === memberId && d.date >= from && d.date <= app.cutoff,
+          )
+          .reduce((t, d) => t + d.amount, 0);
+
       let bad = 0;
+      let worst = "";
       for (const r of rows) {
-        const expected = r.openingBalance + r.newDeposits - r.totalCost;
-        if (expected !== r.closingBalance) bad += 1;
+        const taken = deductionsInMonth(r.memberId);
+        const expected =
+          r.openingBalance + r.newDeposits - r.totalCost - taken;
+        if (expected !== r.closingBalance) {
+          bad += 1;
+          if (!worst)
+            worst = `${r.memberName}: ${r.openingBalance}+${r.newDeposits}-${r.totalCost}-${taken} != ${r.closingBalance}`;
+        }
       }
       if (bad === 0) f.ok();
-      else f.fail(month, "I5", "per-member balance identity", "0 mismatches", String(bad));
+      else
+        f.fail(
+          month,
+          "I5",
+          `per-member balance identity: ${worst}`,
+          "0 mismatches",
+          String(bad),
+        );
       const sumBalances = sum((r) => r.closingBalance);
       const sumDeposits = sum((r) => r.newDeposits);
+      const sumDeductions = rows
+        .map((r) => deductionsInMonth(r.memberId))
+        .reduce((t, v) => t + v, 0);
       const sumCost = sum((r) => r.totalCost);
       const sumOpening = sum((r) => r.openingBalance);
-      const expected = sumOpening + sumDeposits - sumCost;
+      const expected = sumOpening + sumDeposits - sumCost - sumDeductions;
       if (sumBalances === expected) f.ok();
       else
         f.fail(
           month,
           "I5",
-          "Σ balance = Σ deposits − Σ cost",
+          "Σ balance = Σ deposits − Σ cost − Σ deductions",
           String(expected),
           String(sumBalances),
         );
       figures[`${month}|balances`] = sumBalances;
       figures[`${month}|deposits`] = sumDeposits;
+      figures[`${month}|deductions`] = sumDeductions;
     }
 
     // ---------------- I7: register vs settlement counts
@@ -643,6 +676,7 @@ export function checkScenario(s: Scenario): ScenarioReport {
           {
             members: s.members.map(toRefMember),
             deposits: s.deposits.map(toRefDeposit),
+            deductions: (s.deductions ?? []).map(toRefDeposit),
             openingByMember: new Map(
               [...openings.entries()].map(([k, v]) => [k, BigInt(v)]),
             ),
@@ -675,6 +709,7 @@ export function checkScenario(s: Scenario): ScenarioReport {
           bills: s.bills,
           rateCards: s.rateCards,
           deposits: s.deposits,
+          deductions: s.deductions ?? [],
           settlements: s.settlements,
           openingBalances: s.openingBalances,
           lastClosedMonth: s.lastClosedMonth,
