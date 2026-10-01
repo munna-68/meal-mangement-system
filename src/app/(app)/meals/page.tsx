@@ -17,6 +17,7 @@ import { formatTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { getClosedMonthSet, loadLedgerSnapshot } from "@/server/queries";
 import { MealBoard, type BoardRoom } from "./meal-board";
+import { RoomSearchTrigger } from "./meal-room-search";
 
 export const metadata: Metadata = { title: "Meal Status" };
 
@@ -94,7 +95,12 @@ export default async function MealsPage(props: PageProps<"/meals">) {
       <PageHeader
         title="Meal Status Board"
         description={formatLongDisplay(date)}
-        actions={<DateNav date={date} basePath="/meals" />}
+        actions={
+          <>
+            <DateNav date={date} basePath="/meals" />
+            <RoomSearchTrigger />
+          </>
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
