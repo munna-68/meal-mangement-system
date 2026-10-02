@@ -1,14 +1,23 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DateNav } from "@/components/date-nav";
 import { PageHeader, Stat } from "@/components/page-header";
 import {
   computeDayTotals,
   managerFeeDeduction,
+  mealChargeGate,
   rateCardFor,
   roomBreakdownForDay,
+  unconfirmedChargeableDays,
 } from "@/lib/calc";
-import { formatLongDisplay, isValidDateKey, todayKey } from "@/lib/dates";
+import {
+  formatLongDisplay,
+  isValidDateKey,
+  monthOf,
+  monthStart,
+  todayKey,
+} from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
 import { requireSession } from "@/server/auth";
 import { ensureAutoExtrasForDate } from "@/server/auto-extras";
@@ -42,6 +51,19 @@ export default async function TodayPage(props: PageProps<"/today">) {
   ]);
 
   const rateCard = rateCardFor(snapshot.rateCards, date);
+
+  // Days this month that would have charged members but were never confirmed.
+  // They cost nothing, which is the point — but the manager should see them
+  // before a month-end bill freezes them away for good.
+  const skippedDays = unconfirmedChargeableDays({
+    gate: mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates),
+    members: snapshot.members,
+    changes: snapshot.changes,
+    guestMeals: snapshot.guestMeals,
+    from: monthStart(monthOf(today)),
+    to: today,
+    today: snapshot.today,
+  });
 
   const totals = computeDayTotals({
     date,
@@ -124,6 +146,32 @@ export default async function TodayPage(props: PageProps<"/today">) {
           </div>
         }
       />
+
+      {skippedDays.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+          <p className="font-heading font-semibold">
+            {skippedDays.length} day{skippedDays.length === 1 ? "" : "s"} this
+            month charged nobody
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Meals were recorded but the bazar was never confirmed, so nothing was
+            deducted. That is right for a day with nobody in the hostel — but if
+            you did shop, confirm the day and it will be charged.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {skippedDays.map((day) => (
+              <li key={day}>
+                <Link
+                  href={`/today?date=${day}`}
+                  className="inline-block rounded-md border bg-background px-2 py-1 text-xs tabular-nums hover:bg-accent"
+                >
+                  {day}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat

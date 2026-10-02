@@ -25,6 +25,8 @@
  *    a solo multiple for somebody alone in a multi-bed room.
  *  - Total cost = meals (incl. guests) + utility share + extras share.
  *  - Balance = opening + deposits − total cost − deductions.
+ *  - Confirmation gate: from a given day on, a day charges for meals and guest
+ *    meals only if its bazar was confirmed. Days before it always charge.
  */
 
 export type DateKey = string; // YYYY-MM-DD
@@ -270,6 +272,22 @@ export interface RefOptions {
    * be measured instead of argued about.
    */
   guestDeductionApplies?: boolean;
+  /**
+   * The confirmation gate. From `startsOn` onward a day charges nothing unless
+   * its bazar is in `confirmedDays`; before it, every day charges as always.
+   * Derived from the same owner instruction as the rest of this file, and
+   * written out longhand rather than shared with the app on purpose.
+   */
+  gate?: { startsOn: DateKey; confirmedDays: ReadonlySet<DateKey> } | null;
+}
+
+/** Whether a day may charge for meals and guest meals under the gate. */
+export function refDayIsChargeable(
+  day: DateKey,
+  gate: { startsOn: DateKey; confirmedDays: ReadonlySet<DateKey> } | null | undefined,
+): boolean {
+  if (!gate) return true;
+  return cmp(day, gate.startsOn) < 0 || gate.confirmedDays.has(day);
 }
 
 export interface RefMemberCost {
@@ -386,6 +404,7 @@ export function refComputeMonth(
   let mealCostTotal = BigInt(0);
   for (const day of eachDay(input.month)) {
     if (cmp(day, cutoff) > 0) break;
+    if (!refDayIsChargeable(day, opts.gate)) continue;
     const card = cardFor(input.cards, day);
     if (!card) continue;
     for (const m of active) {
@@ -404,6 +423,7 @@ export function refComputeMonth(
   for (const g of input.guests) {
     if (cmp(g.date, from) < 0) continue;
     if (cmp(g.date, cutoff) > 0) continue;
+    if (!refDayIsChargeable(g.date, opts.gate)) continue;
     const row = per.get(g.memberId);
     if (!row) continue; // guest attached to somebody not active in the window
     const card = cardFor(input.cards, g.date);

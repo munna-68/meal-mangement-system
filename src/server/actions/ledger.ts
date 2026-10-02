@@ -12,7 +12,12 @@ import {
   khalaPayments,
   utilityBills,
 } from "@/db/schema";
-import { apportionKhala, computeRunningBalances, rateCardFor } from "@/lib/calc";
+import {
+  apportionKhala,
+  computeRunningBalances,
+  mealChargeGate,
+  rateCardFor,
+} from "@/lib/calc";
 import {
   fail,
   firstIssue,
@@ -649,6 +654,12 @@ async function liveBalanceFor(memberId: string): Promise<number | null> {
     soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
     soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
     today: snapshot.today,
+    // The same gate the Balances page uses, or the guard below would compare the
+    // typed amount against a different number than the manager is looking at.
+    gate: mealChargeGate(
+      snapshot.settings,
+      snapshot.confirmedBazarDates,
+    ),
   });
 
   const row = result.rows.find((candidate) => candidate.memberId === memberId);

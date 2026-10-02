@@ -98,6 +98,7 @@ export async function getMessSettings(): Promise<MessSettingsData | null> {
     ramadanMode: row.ramadanMode,
     soloElectricityMultiplier: row.soloElectricityMultiplier,
     soloWifiMultiplier: row.soloWifiMultiplier,
+    mealChargeGateStarts: row.mealChargeGateStarts,
   };
 }
 
@@ -774,6 +775,8 @@ export interface LedgerSnapshot {
   settlements: SettlementData[];
   openingBalances: OpeningBalanceData[];
   lastClosedMonth: MonthKey | null;
+  /** Every day whose bazar has been confirmed — row existence *is* the flag. */
+  confirmedBazarDates: DateKey[];
 }
 
 export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
@@ -792,6 +795,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     settlements,
     openingBalanceRows,
     lastClosedMonth,
+    confirmedBazarDates,
   ] = await Promise.all([
     getSettingsOrDefaults(),
     getRateCards(),
@@ -807,6 +811,7 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     getSettlements(),
     getOpeningBalances(),
     getLastClosedMonth(),
+    getAllConfirmedBazarDates(),
   ]);
 
   return {
@@ -826,5 +831,6 @@ export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
     settlements,
     openingBalances: openingBalanceRows,
     lastClosedMonth,
+    confirmedBazarDates,
   };
 }

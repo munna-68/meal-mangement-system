@@ -73,6 +73,17 @@ export const messSettings = pgTable("mess_settings", {
     .notNull()
     .default(2),
   soloWifiMultiplier: integer("solo_wifi_multiplier").notNull().default(1),
+  /**
+   * From this date on, a day only costs members money once its bazar has been
+   * confirmed. Before it, every past day is charged as it always was.
+   *
+   * Meal status is sticky — it carries forward until somebody changes it — so
+   * the balance used to grow a day's meals the moment midnight passed, with no
+   * confirmation anywhere. Gating on confirmation fixes that, but only from here
+   * on: switching it on retroactively would silently refund every unconfirmed day
+   * already charged and put members into credit. Null means the gate is off.
+   */
+  mealChargeGateStarts: dateColumn("meal_charge_gate_starts"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

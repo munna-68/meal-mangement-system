@@ -87,7 +87,9 @@ const loadLedgerSnapshot = async () => ({
   lastClosedMonth: null,
   today: "2026-09-30",
   currentMonth: "2026-09",
-  settings: { soloElectricityMultiplier: 2, soloWifiMultiplier: 1, ramadanMode: false },
+  // Gate off, so the fixtures price exactly as they always have.
+  confirmedBazarDates: [],
+  settings: { soloElectricityMultiplier: 2, soloWifiMultiplier: 1, ramadanMode: false, mealChargeGateStarts: null },
 });
 const insertAutoExtraRows = async () => 0;
 const pendingAutoExtraRows = () => [];

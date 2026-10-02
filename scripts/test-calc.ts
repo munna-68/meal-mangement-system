@@ -14,13 +14,18 @@ import {
   extraPoolForRange,
   isSoloInSharedRoom,
   khalaAmountFor,
+  latestConfirmedDay,
+  dayIsChargeable,
+  mealChargeGate,
   apportionKhala,
   occupancyForRange,
   rateCardFor,
   resolveStatusTimeline,
   mealRegisterForMonth,
   roomBreakdownForDay,
+  unconfirmedChargeableDays,
   type ExtraItemData,
+  type MealChargeGate,
   type MemberData,
   type RateCardData,
   type RegisterSnapshot,
@@ -2598,6 +2603,284 @@ section("Month and date keys");
   check("29 February 2028 is accepted", isValidDateKey("2028-02-29"), true);
 }
 
+// ---------------------------------------------------------------------------
+// The confirmation gate
+//
+// Meal status is sticky, so before the gate the balance grew a day's meals the
+// moment midnight passed, with no confirmation anywhere. The gate says a day only
+// charges once its bazar is confirmed — but never for a day that has already
+// been billed.
+// ---------------------------------------------------------------------------
+
+section("The confirmation gate");
+{
+  const gate = (
+    startsOn: string,
+    confirmed: string[],
+  ): MealChargeGate => ({ startsOn, confirmedDays: new Set(confirmed) });
+
+  const everyDayOfMarch = Array.from({ length: 31 }, (_, i) =>
+    `2025-03-${String(i + 1).padStart(2, "0")}`,
+  );
+
+  // One member, FULL from the 1st at ৳60 a day, with every other charge left out
+  // so the meal figure is read straight off the member's own row.
+  const SOLO: MemberData[] = [member("m1", "A")];
+  const soloFull: StatusChangeData[] = [
+    { memberId: "m1", date: "2025-03-01", status: "FULL", sehri: false },
+  ];
+
+  const mealsFor = (options: {
+    gate?: MealChargeGate | null;
+    today: string;
+    changes?: StatusChangeData[];
+    guestMeals?: GuestMealData[];
+  }) => {
+    const computation = computeMonth({
+      month: "2025-03",
+      members: SOLO,
+      rooms: ROOMS,
+      changes: options.changes ?? soloFull,
+      guestMeals: options.guestMeals ?? [],
+      extras: [],
+      bills: [],
+      rateCards: [RATE_CARD],
+      today: options.today,
+      ...(options.gate === undefined ? {} : { gate: options.gate }),
+    });
+    return computation.perMember.get("m1")!.mealAmount;
+  };
+
+  // Without a gate, a full unfiltered month is billed — the old behaviour, and
+  // what every other assertion in this file already assumes.
+  check("no gate bills the whole month as before", mealsFor({ today: "2025-03-31" }), 31 * 60);
+
+  // The headline bug. Nothing confirmed, so nothing is charged.
+  check(
+    "an unconfirmed month charges nothing at all",
+    mealsFor({ gate: gate("2025-03-01", []), today: "2025-03-31" }),
+    0,
+  );
+  check(
+    "the same month with every day confirmed is billed in full",
+    mealsFor({ gate: gate("2025-03-01", everyDayOfMarch), today: "2025-03-31" }),
+    31 * 60,
+  );
+  check(
+    "only the confirmed day is charged",
+    mealsFor({ gate: gate("2025-03-01", ["2025-03-05"]), today: "2025-03-31" }),
+    60,
+  );
+  check(
+    "two confirmed days are charged",
+    mealsFor({
+      gate: gate("2025-03-01", ["2025-03-05", "2025-03-06"]),
+      today: "2025-03-31",
+    }),
+    120,
+  );
+
+  // The regression that matters most: the gate must never reach backwards.
+  // Days 1-9 predate it, so they stay billed exactly as they always were —
+  // switching this on cannot quietly refund a month already charged.
+  check(
+    "days before the gate starts are still charged, confirmed or not",
+    mealsFor({ gate: gate("2025-03-10", ["2025-03-11"]), today: "2025-03-31" }),
+    (9 + 1) * 60,
+  );
+
+  // The reported symptom, end to end: midnight passes and nothing moves.
+  {
+    const through10 = mealsFor({
+      gate: gate("2025-03-10", ["2025-03-10"]),
+      today: "2025-03-10",
+    });
+    check("the confirmed day is charged", through10, (9 + 1) * 60);
+    check(
+      "midnight arriving does not charge the new day",
+      mealsFor({ gate: gate("2025-03-10", ["2025-03-10"]), today: "2025-03-11" }),
+      through10,
+    );
+    check(
+      "a day left unconfirmed stays free however far the month runs",
+      mealsFor({ gate: gate("2025-03-10", ["2025-03-10"]), today: "2025-03-31" }),
+      through10,
+    );
+    check(
+      "confirming the new day is what moves the balance",
+      mealsFor({
+        gate: gate("2025-03-10", ["2025-03-10", "2025-03-11"]),
+        today: "2025-03-11",
+      }),
+      through10 + 60,
+    );
+  }
+
+  // A guest meal is a meal and obeys the same rule.
+  const guestOnFifth: GuestMealData[] = [
+    { memberId: "m1", date: "2025-03-05", type: "GUEST_FULL", count: 1 },
+  ];
+  const guestCount = (confirmed: string[]) =>
+    computeMonth({
+      month: "2025-03",
+      members: SOLO,
+      rooms: ROOMS,
+      changes: soloFull,
+      guestMeals: guestOnFifth,
+      extras: [],
+      bills: [],
+      rateCards: [RATE_CARD],
+      today: "2025-03-31",
+      gate: gate("2025-03-01", confirmed),
+    }).totals.guestFullCount;
+
+  check("a guest meal on an unconfirmed day is not charged", guestCount(["2025-03-06"]), 0);
+  check("the same guest meal on a confirmed day is charged", guestCount(["2025-03-05"]), 1);
+
+  // The empty hostel: nobody ate, so there is nothing to charge.
+  check(
+    "a day with everyone OFF has nothing to charge",
+    mealsFor({
+      gate: gate("2025-03-01", []),
+      changes: [{ memberId: "m1", date: "2025-03-01", status: "OFF", sehri: false }],
+      today: "2025-03-31",
+    }),
+    0,
+  );
+
+  // Money that actually changed hands is never gated. A deposit paid on the 20th
+  // must still be in the balance on the 20th, confirmed or not.
+  {
+    const balance = computeRunningBalances({
+      members: SOLO,
+      rooms: ROOMS,
+      changes: soloFull,
+      guestMeals: [],
+      extras: [],
+      bills: [],
+      rateCards: [RATE_CARD],
+      deposits: [{ memberId: "m1", date: "2025-03-20", amount: 5000 }],
+      deductions: [],
+      settlements: [],
+      openingBalances: [],
+      lastClosedMonth: null,
+      today: "2025-03-31",
+      gate: gate("2025-03-01", ["2025-03-10"]),
+    }).rows.find((row) => row.memberId === "m1");
+
+    check("a deposit after the last confirmed day still counts", balance?.deposits, 5000);
+    check("only confirmed days are charged to the member", balance?.cost, 60);
+    check("the balance nets the deposit against the confirmed cost", balance?.balance, 5000 - 60);
+  }
+}
+
+section("The gate is built from the mess's own settings");
+{
+  check(
+    "no configured start date means no gate at all",
+    mealChargeGate({ mealChargeGateStarts: null }, ["2025-03-05"]),
+    null,
+  );
+  const built = mealChargeGate(
+    { mealChargeGateStarts: "2025-03-10" },
+    ["2025-03-11", "2025-03-12"],
+  );
+  check("the start date is carried through", built?.startsOn, "2025-03-10");
+  check("a day before the start is chargeable, confirmed or not", dayIsChargeable("2025-03-09", built!), true);
+  check("an unconfirmed day on the start date is not chargeable", dayIsChargeable("2025-03-10", built!), false);
+  check("a confirmed day after the start is chargeable", dayIsChargeable("2025-03-11", built!), true);
+}
+
+section("The most recent confirmed day");
+{
+  check(
+    "the latest of several is picked",
+    latestConfirmedDay(["2025-03-01", "2025-03-20", "2025-03-11"], "2025-03-31"),
+    "2025-03-20",
+  );
+  check("nothing confirmed means nothing to report", latestConfirmedDay([], "2025-03-31"), null);
+  check(
+    "a future date is never reported",
+    latestConfirmedDay(["2025-03-20", "2025-04-05"], "2025-03-31"),
+    "2025-03-20",
+  );
+}
+
+section("The days that are being given away");
+{
+  const gate: MealChargeGate = {
+    startsOn: "2025-03-01",
+    confirmedDays: new Set(["2025-03-05", "2025-03-06"]),
+  };
+  const everyoneOff = MEMBERS.map((m) => ({
+    memberId: m.id,
+    date: "2025-03-01",
+    status: "OFF" as const,
+    sehri: false,
+  }));
+  const skipped = (changes: StatusChangeData[], guestMeals: GuestMealData[] = []) =>
+    unconfirmedChargeableDays({
+      gate,
+      members: MEMBERS,
+      changes,
+      guestMeals,
+      from: "2025-03-01",
+      to: "2025-03-10",
+      today: "2025-03-10",
+    });
+
+  // Everyone is FULL from the 1st, so every unconfirmed day would have charged.
+  check("every unconfirmed day with meals is listed, in order", skipped(FULL_FROM_MARCH_1), [
+    "2025-03-01", "2025-03-02", "2025-03-03", "2025-03-04",
+    "2025-03-07", "2025-03-08", "2025-03-09", "2025-03-10",
+  ]);
+
+  // Activity is read from the resolved timeline, not from the change rows, so one
+  // status set on the 1st makes every later day chargeable even though nothing
+  // is recorded against them. Missing this is how the warning would go blind on
+  // exactly the days it exists to catch.
+  check(
+    "one status set on the 1st still makes all 8 unconfirmed days chargeable",
+    skipped([{ memberId: "m1", date: "2025-03-01", status: "FULL", sehri: false }, ...everyoneOff.slice(1)]),
+    ["2025-03-01", "2025-03-02", "2025-03-03", "2025-03-04", "2025-03-07", "2025-03-08", "2025-03-09", "2025-03-10"],
+  );
+
+  check("an empty hostel lists nothing", skipped(everyoneOff), []);
+
+  check(
+    "a guest meal alone makes a day chargeable",
+    skipped(everyoneOff, [{ memberId: "m1", date: "2025-03-09", type: "GUEST_FULL", count: 1 }]),
+    ["2025-03-09"],
+  );
+
+  check(
+    "with the gate off there is nothing being skipped",
+    unconfirmedChargeableDays({
+      gate: null,
+      members: MEMBERS,
+      changes: FULL_FROM_MARCH_1,
+      guestMeals: [],
+      from: "2025-03-01",
+      to: "2025-03-10",
+      today: "2025-03-10",
+    }),
+    [],
+  );
+
+  check(
+    "a future day is never listed",
+    unconfirmedChargeableDays({
+      gate,
+      members: MEMBERS,
+      changes: FULL_FROM_MARCH_1,
+      guestMeals: [],
+      from: "2025-03-01",
+      to: "2025-03-20",
+      today: "2025-03-10",
+    }),
+    skipped(FULL_FROM_MARCH_1),
+  );
+}
 // ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------

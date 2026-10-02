@@ -9,7 +9,11 @@ import { PageHeader, SectionCard, Stat } from "@/components/page-header";
 import { PdfButton } from "@/components/pdf-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { computeRunningBalances } from "@/lib/calc";
+import {
+  computeRunningBalances,
+  latestConfirmedDay,
+  mealChargeGate,
+} from "@/lib/calc";
 import {
   addDays,
   formatDisplay,
@@ -51,6 +55,17 @@ export default async function BalancesPage() {
 
   const snapshot = await loadLedgerSnapshot();
 
+  // A day only charges members once its bazar is confirmed, so the balance stops
+  // moving the moment midnight passes and waits for the manager.
+  const gate = mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates);
+
+  // Say out loud how far the figure has been charged, so a balance that stops
+  // moving at midnight looks deliberate instead of broken.
+  const chargedThrough = latestConfirmedDay(
+    snapshot.confirmedBazarDates,
+    snapshot.today,
+  );
+
   const result = computeRunningBalances({
     members: snapshot.members,
     rooms: snapshot.rooms,
@@ -69,6 +84,7 @@ export default async function BalancesPage() {
     soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
     soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
     today: snapshot.today,
+    gate,
   });
 
   // Every member is listed, including one who has since left: their share of the
@@ -185,7 +201,11 @@ export default async function BalancesPage() {
         <Stat
           label="Accrued cost"
           value={formatTaka(result.summary.cost)}
-          hint="meals + paid Khala + bills + Extra, accrued to date"
+          hint={
+            gate
+              ? `charged through ${chargedThrough ?? "nothing yet"}`
+              : "meals + paid Khala + bills + Extra, accrued to date"
+          }
         />
         <Stat
           label={hasDeclaredOpening ? "Opening balance set" : "Opening carried in"}

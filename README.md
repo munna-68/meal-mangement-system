@@ -180,6 +180,33 @@ are charged to nobody. Downloading or sharing the slip confirms the day first, s
 slip can never show figures that were never registered. Either charge can still be
 turned off for a single day from Today's Bazar.
 
+### A day is only charged once its bazar is confirmed
+
+Meals and guest meals follow the same rule. A member's meal status is *sticky* — it
+carries forward until somebody changes it — so the balance used to grow another day's
+meals the moment midnight passed, with no confirmation anywhere. Since
+`mess_settings.meal_charge_gate_starts` was set, **every day from that date onward is
+charged only if its bazar has been confirmed**:
+
+| Day | Charged? |
+| --- | --- |
+| Before the gate starts | Yes, exactly as it always was — the gate never reaches backwards, so switching it on cannot refund a month already billed |
+| On/after the gate, bazar confirmed | Yes |
+| On/after the gate, **not** confirmed | **No.** Permanently, whatever you confirm later |
+
+That last row is deliberate: a day with nobody in the hostel should cost nobody
+anything. Nothing you have paid in is affected — deposits and money taken out are
+still counted the moment you record them, because those are real cash movements
+rather than accrued cost. Only the *cost* waits.
+
+Three places make the skipped days visible instead of letting them disappear quietly:
+
+- **Today's Bazar** lists the days that were not charged, with links to each one.
+- **Balances** shows `charged through <date>` under Accrued cost, so a figure that
+  stops moving at midnight looks deliberate.
+- **Settlement** warns inside the close dialog, because closing a month freezes the
+  gap permanently and the only way out afterwards is reopening.
+
 ## Screens
 
 | Route | Notes |

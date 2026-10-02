@@ -39,6 +39,7 @@ export function SettlementClient({
   totalCost,
   totalDeposits,
   totalClosing,
+  skippedDays,
 }: {
   month: string;
   months: string[];
@@ -51,6 +52,12 @@ export function SettlementClient({
   totalCost: number;
   totalDeposits: number;
   totalClosing: number;
+  /**
+   * Days in this month that had meals but no confirmed bazar, so they were not
+   * charged. Closing freezes that permanently, so the manager is told before
+   * doing it rather than after.
+   */
+  skippedDays: string[];
 }) {
   const router = useRouter();
   const { run, pending } = useAction();
@@ -174,6 +181,22 @@ export function SettlementClient({
                   Recurring daily extras and the manager&rsquo;s fee are generated
                   for every day first, so days nobody opened are still counted.
                 </p>
+                {skippedDays.length > 0 ? (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-muted-foreground">
+                    <p className="font-medium text-foreground">
+                      {skippedDays.length} day{skippedDays.length === 1 ? "" : "s"}{" "}
+                      were not charged
+                    </p>
+                    <p className="mt-1">
+                      {skippedDays.join(", ")} had meals recorded but no confirmed
+                      bazar, so nothing was deducted for {skippedDays.length === 1 ? "it" : "them"}. That is
+                      correct if the hostel was empty. If you did shop on{" "}
+                      {skippedDays.length === 1 ? "that day" : "those days"}, unconfirm and
+                      confirm {skippedDays.length === 1 ? "it" : "them"} first — closing now
+                      freezes the gap permanently.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

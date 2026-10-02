@@ -9,6 +9,12 @@ export interface MessSettingsData {
   ramadanMode: boolean;
   soloElectricityMultiplier: number;
   soloWifiMultiplier: number;
+  /**
+   * First day on which a day only charges members once its bazar is confirmed.
+   * Null (the fallback, and a database that predates the column) means the gate
+   * is off, which is the behaviour this app always had.
+   */
+  mealChargeGateStarts: string | null;
 }
 
 export const FALLBACK_SETTINGS: MessSettingsData = {
@@ -17,6 +23,7 @@ export const FALLBACK_SETTINGS: MessSettingsData = {
   ramadanMode: false,
   soloElectricityMultiplier: 2,
   soloWifiMultiplier: 1,
+  mealChargeGateStarts: null,
 };
 
 export const MEAL_STATUS_VALUES = [

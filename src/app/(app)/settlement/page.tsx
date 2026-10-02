@@ -10,8 +10,10 @@ import {
   apportionKhala,
   buildSettlementRows,
   computeMonth,
+  mealChargeGate,
   mealRegisterForMonth,
   rateCardFor,
+  unconfirmedChargeableDays,
   type RegisterSnapshot,
 } from "@/lib/calc";
 import {
@@ -260,6 +262,18 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
     register = { days: live.days, rows: live.rows };
   }
 
+  // Days that had meals but no confirmed bazar, so they were never charged.
+  // Closing the month freezes that for good, so the manager is warned first.
+  const skippedDays = unconfirmedChargeableDays({
+    gate: mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates),
+    members: snapshot.members,
+    changes: snapshot.changes,
+    guestMeals: snapshot.guestMeals,
+    from: monthStart(month),
+    to: monthEnd(month),
+    today: snapshot.today,
+  });
+
   return (
     <>
       <PageHeader
@@ -292,6 +306,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
         totalCost={totals.cost}
         totalDeposits={totals.deposits}
         totalClosing={totals.closing}
+        skippedDays={isClosed ? [] : skippedDays}
       />
 
       {!isClosed && khalaStanding && khalaStanding.outstanding > 0 ? (

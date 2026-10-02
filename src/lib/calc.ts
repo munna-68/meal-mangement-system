@@ -1172,10 +1172,135 @@ export interface MonthComputation {
   };
 }
 
+/**
+ * The confirmation gate.
+ *
+ * A member's meal status is sticky — it carries forward until somebody changes
+ * it — so charging every day up to `today` meant the balance grew a day's meals
+ * the moment midnight passed, with no confirmation anywhere. Passing a gate says
+ * that from `startsOn` onward a day only costs money once its bazar has been
+ * confirmed.
+ *
+ * `startsOn` is not cosmetic: the gate never reaches backwards. Days before it
+ * are charged exactly as they always were, so turning this on cannot silently
+ * refund a month of meals the members have already been billed for.
+ */
+export interface MealChargeGate {
+  /** Inclusive first day the gate applies to. */
+  startsOn: DateKey;
+  /** Every day whose bazar has been confirmed. */
+  confirmedDays: ReadonlySet<DateKey>;
+}
+
+/**
+ * Whether a day may charge members for meals and guest meals.
+ *
+ * Before the gate starts, always yes. From `startsOn` on, only a confirmed day.
+ * A day with no bazar record costs nobody anything, permanently — that is what
+ * makes an empty hostel, or a day simply not confirmed, free rather than
+ * silently billed later.
+ */
+export function dayIsChargeable(day: DateKey, gate: MealChargeGate): boolean {
+  return compare(day, gate.startsOn) < 0 || gate.confirmedDays.has(day);
+}
+
+/**
+ * Builds the gate from the mess's own configuration, or null when the gate is
+ * off. One place decides whether gating applies at all, so every screen prices
+ * the balance the same way and cannot disagree with another.
+ */
+export function mealChargeGate(
+  settings: { mealChargeGateStarts: DateKey | null },
+  confirmedDays: Iterable<DateKey>,
+): MealChargeGate | null {
+  const startsOn = settings.mealChargeGateStarts;
+  if (!startsOn) return null;
+  return { startsOn, confirmedDays: new Set(confirmedDays) };
+}
+
+/**
+ * The most recent day the bazar has been confirmed for, never looking past
+ * today. Null when nothing has ever been confirmed.
+ */
+export function latestConfirmedDay(
+  confirmedDays: Iterable<DateKey>,
+  today: DateKey = todayKey(),
+): DateKey | null {
+  let latest: DateKey | null = null;
+  for (const day of confirmedDays) {
+    if (compare(day, today) > 0) continue;
+    if (latest === null || compare(day, latest) > 0) latest = day;
+  }
+  return latest;
+}
+
+/**
+ * The days in a window that *would* charge members but are not being charged,
+ * because the gate is on and their bazar was never confirmed.
+ *
+ * This is the mess's early-warning list. A skipped day is free by design — an
+ * empty hostel should cost nobody anything — but it is also money the manager
+ * may not realise they are giving away, so the app shows it rather than letting
+ * it disappear silently into a month-end bill that can never be reopened.
+ *
+ * Activity is read from the resolved status timeline rather than from the change
+ * rows, because status is sticky: a member left on FULL has an implicit meal on
+ * every day since, with nothing recorded on it.
+ */
+export function unconfirmedChargeableDays(input: {
+  gate: MealChargeGate | null;
+  members: MemberData[];
+  changes: StatusChangeData[];
+  guestMeals: GuestMealData[];
+  from: DateKey;
+  to: DateKey;
+  today?: DateKey;
+}): DateKey[] {
+  const { gate, members, changes, guestMeals, from, to } = input;
+  const today = input.today ?? todayKey();
+  // With the gate off nothing is being skipped, so there is nothing to warn about.
+  if (!gate) return [];
+
+  const end = compare(to, today) < 0 ? to : today;
+  if (compare(from, end) > 0) return [];
+
+  const active = members.filter((member) =>
+    isMemberActiveInRange(member, from, end, today),
+  );
+  const timeline = resolveStatusTimeline(
+    changes,
+    active.map((member) => member.id),
+    from,
+    end,
+  );
+  const guestDays = new Set(guestMeals.map((guest) => guest.date));
+
+  const skipped: DateKey[] = [];
+  let cursor = from;
+  let guard = 0;
+  while (compare(cursor, end) <= 0) {
+    if (++guard > 2000) break;
+    if (!dayIsChargeable(cursor, gate)) {
+      const someoneAte = active.some((member) => {
+        const state = timeline.get(member.id)?.get(cursor);
+        return state ? state.status !== "OFF" : false;
+      });
+      if (someoneAte || guestDays.has(cursor)) skipped.push(cursor);
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return skipped;
+}
+
 export interface MonthComputationInput {
   month: MonthKey;
   /** Compute only up to this date; defaults to the end of the month. */
   cutoff?: DateKey;
+  /**
+   * Require a confirmed bazar before a day may charge for meals and guest
+   * meals. Absent means no gate, which is the historical behaviour.
+   */
+  gate?: MealChargeGate | null;
   /**
    * Says "this is the month's bill" rather than "this is where the mess is
    * today". It no longer changes a single figure: the flat monthly charges are
@@ -1220,6 +1345,7 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     soloElectricityMultiplier = 2,
     soloWifiMultiplier = 1,
     today = todayKey(),
+    gate = null,
   } = input;
 
   const from = monthStart(month);
@@ -1274,6 +1400,8 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
   // Meal costs are priced day by day so a mid-month rate change is accurate.
   for (const day of daysInMonth(month)) {
     if (compare(day, cutoff) > 0) break;
+    // Once the gate is on, an unconfirmed day charges nobody.
+    if (gate && !dayIsChargeable(day, gate)) continue;
     const card = rateCardFor(rateCards, day);
     for (const member of activeMembers) {
       if (!isMemberActiveOn(member, day, today)) continue;
@@ -1297,6 +1425,9 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
   for (const guest of guestMeals) {
     if (compare(guest.date, from) < 0) continue;
     if (compare(guest.date, cutoff) > 0) continue;
+    // A guest meal is a meal: the gate applies to it exactly as it does to the
+    // member's own, so an unconfirmed day hosts nobody's guests either.
+    if (gate && !dayIsChargeable(guest.date, gate)) continue;
     const row = perMember.get(guest.memberId);
     if (!row) continue;
     const card = rateCardFor(rateCards, guest.date);
@@ -1530,6 +1661,11 @@ export function computeRunningBalances(input: {
   soloElectricityMultiplier?: number;
   soloWifiMultiplier?: number;
   today?: DateKey;
+  /**
+   * Require a confirmed bazar before a day may charge for meals and guest
+   * meals. Absent means no gate, which is the historical behaviour.
+   */
+  gate?: MealChargeGate | null;
 }): RunningBalanceResult {
   const {
     members,
@@ -1549,6 +1685,7 @@ export function computeRunningBalances(input: {
     soloElectricityMultiplier = 2,
     soloWifiMultiplier = 1,
     today = todayKey(),
+    gate = null,
   } = input;
 
   // The open period starts the day after the last closed month. When nothing
@@ -1604,6 +1741,7 @@ export function computeRunningBalances(input: {
       const computation = computeMonth({
         month: monthCursor,
         cutoff: periodEnd,
+        gate,
         members,
         rooms,
         changes,
