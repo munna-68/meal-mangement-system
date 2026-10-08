@@ -767,11 +767,13 @@ export interface RegisterCell {
   /** null when the member was not living here yet, or the day is still ahead. */
   status: MealStatus | null;
   /**
-   * False only when the day happened but cannot be charged yet, because its
-   * bazar is still unconfirmed. The code is still shown — the member really did
-   * eat — but the day is left out of the row's totals so the register agrees
-   * with the settlement. Absent on snapshots frozen before this existed, which
-   * is read as "counted", keeping older closed months exactly as they were.
+   * False only when the day happened but is not settled yet, because its bazar
+   * is still unconfirmed. Such a day is left out of the row's totals and
+   * printed blank, so the register shows only what has been confirmed and its
+   * figures agree with the settlement. The status stays on the cell because the
+   * meal really did happen — only the printing and the count ignore it. Absent
+   * on snapshots frozen before this existed, which reads as "counted", keeping
+   * older closed months exactly as they were.
    */
   billable?: boolean;
 }
@@ -850,8 +852,9 @@ export function mealRegisterForMonth(input: {
       }
       const { status } = perDay?.get(day) ?? { status: "OFF" as MealStatus };
       // Same test the money uses, so the ফুল / হাফ totals here are the totals
-      // that were billed. The code itself is still printed: attendance happened
-      // either way, and hiding it would make the register lie about the meal.
+      // that were billed. The status stays on the cell because the meal did
+      // happen; the flag is what tells the sheet to print the day blank until
+      // its bazar is confirmed, so the register only ever shows settled days.
       const billable = !gate || dayIsChargeable(day, gate);
       if (billable) {
         if (status === "FULL") fullCount += 1;

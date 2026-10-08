@@ -1364,9 +1364,11 @@ section("Register excludes days the gate cannot bill");
 
   // Six days elapsed (10th to 15th), but only 10th-14th are billable.
   // Cells are indexed by day of the month, so the 15th is index 14.
+  // The status is deliberately still known — the meal happened — but the sheet
+  // renders an unbilled day as blank, and the flag is what it keys off.
   check("unconfirmed days are left out of the totals", g.fullCount, 5);
-  check("the code is still shown on the unbilled day", g.cells[14].status, "FULL");
-  check("the unbilled day is flagged", g.cells[14].billable, false);
+  check("the unbilled day's status is still known", g.cells[14].status, "FULL");
+  check("the unbilled day is flagged so the sheet can blank it", g.cells[14].billable, false);
   check("the days before the gate are still counted", g.cells[9].billable, true);
   check("a confirmed day is counted", g.cells[13].billable, true);
 

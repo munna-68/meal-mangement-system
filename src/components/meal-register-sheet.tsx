@@ -139,19 +139,29 @@ export function MealRegisterSheet({
                     </td>
                   );
                 }
+                // An unbilled day prints nothing. The register only shows what has
+                // actually been settled, so a day waiting on its bazar looks
+                // like a day not yet in the register — and fills in by itself the
+                // moment that bazar is confirmed.
+                if (cell.billable === false) {
+                  return (
+                    <td
+                      key={cell.day}
+                      className={`${styles.blank} ${
+                        cellIndex === 15 ? styles.blockStart : ""
+                      }`}
+                      title={`${cell.day} — bazar not confirmed, so this day is not in the register yet`}
+                    >
+                      –
+                    </td>
+                  );
+                }
                 return (
                   <td
                     key={cell.day}
-                    className={`${styles.code} ${
-                      cell.billable === false ? styles.unbilled : ""
-                    } ${STATUS_CLASS[cell.status]} ${
+                    className={`${styles.code} ${STATUS_CLASS[cell.status]} ${
                       cellIndex === 15 ? styles.blockStart : ""
                     }`}
-                    title={
-                      cell.billable === false
-                        ? `${cell.day} — bazar not confirmed, so this meal is not billed yet`
-                        : undefined
-                    }
                   >
                     {STATUS_CODE[cell.status]}
                   </td>
