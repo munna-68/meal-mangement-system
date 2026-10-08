@@ -114,6 +114,10 @@ export async function closeMonth(
       );
     }
 
+    // One gate object, shared by the money and the register below, so the frozen
+    // register's totals cannot drift from the frozen bill.
+    const gate = mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates);
+
     const computation = computeMonth({
       month,
       cutoff: monthEnd(month),
@@ -124,7 +128,7 @@ export async function closeMonth(
       // month freezes the ungated cost, and because the closing balance becomes
       // the next month's opening balance, the overcharge is carried forward
       // forever and can only be undone by reopening and reclosing every month.
-      gate: mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates),
+      gate,
       stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
       members: snapshot.members,
       rooms: snapshot.rooms,
@@ -168,6 +172,9 @@ export async function closeMonth(
       rooms: snapshot.rooms,
       changes: snapshot.changes,
       today: snapshot.today,
+      // Same gate as the computation above: a day frozen into this register must
+      // be counted only if it was also billed into this month's settlement.
+      gate,
     });
     const registerSnapshot: RegisterSnapshot = {
       days: register.days,

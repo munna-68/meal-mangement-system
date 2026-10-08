@@ -270,6 +270,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       rooms: snapshot.rooms,
       changes: snapshot.changes,
       today: snapshot.today,
+      gate,
     });
     register = { days: live.days, rows: live.rows };
   }

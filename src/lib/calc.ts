@@ -766,6 +766,14 @@ export interface RegisterCell {
   day: DateKey;
   /** null when the member was not living here yet, or the day is still ahead. */
   status: MealStatus | null;
+  /**
+   * False only when the day happened but cannot be charged yet, because its
+   * bazar is still unconfirmed. The code is still shown — the member really did
+   * eat — but the day is left out of the row's totals so the register agrees
+   * with the settlement. Absent on snapshots frozen before this existed, which
+   * is read as "counted", keeping older closed months exactly as they were.
+   */
+  billable?: boolean;
 }
 
 export interface RegisterRow {
@@ -800,8 +808,15 @@ export function mealRegisterForMonth(input: {
   rooms: RoomData[];
   changes: StatusChangeData[];
   today?: DateKey;
+  /**
+   * When the mess charges a day only after its bazar is confirmed, the register
+   * has to use the same rule or its totals disagree with the settlement. Passed
+   * in rather than read here so one caller decides policy for every screen.
+   */
+  gate?: MealChargeGate | null;
 }): { days: DateKey[]; cutoff: DateKey; rows: RegisterRow[] } {
   const { month, members, rooms, changes, today = todayKey() } = input;
+  const gate = input.gate ?? null;
 
   const days = daysInMonth(month);
   const first = monthStart(month);
@@ -834,9 +849,15 @@ export function mealRegisterForMonth(input: {
         return { day, status: null };
       }
       const { status } = perDay?.get(day) ?? { status: "OFF" as MealStatus };
-      if (status === "FULL") fullCount += 1;
-      else if (status === "HALF_DAY" || status === "HALF_NIGHT") halfCount += 1;
-      return { day, status };
+      // Same test the money uses, so the ফুল / হাফ totals here are the totals
+      // that were billed. The code itself is still printed: attendance happened
+      // either way, and hiding it would make the register lie about the meal.
+      const billable = !gate || dayIsChargeable(day, gate);
+      if (billable) {
+        if (status === "FULL") fullCount += 1;
+        else if (status === "HALF_DAY" || status === "HALF_NIGHT") halfCount += 1;
+      }
+      return { day, status, billable };
     });
 
     return {

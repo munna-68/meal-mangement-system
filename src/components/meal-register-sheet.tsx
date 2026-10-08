@@ -142,9 +142,16 @@ export function MealRegisterSheet({
                 return (
                   <td
                     key={cell.day}
-                    className={`${styles.code} ${STATUS_CLASS[cell.status]} ${
+                    className={`${styles.code} ${
+                      cell.billable === false ? styles.unbilled : ""
+                    } ${STATUS_CLASS[cell.status]} ${
                       cellIndex === 15 ? styles.blockStart : ""
                     }`}
+                    title={
+                      cell.billable === false
+                        ? `${cell.day} — bazar not confirmed, so this meal is not billed yet`
+                        : undefined
+                    }
                   >
                     {STATUS_CODE[cell.status]}
                   </td>

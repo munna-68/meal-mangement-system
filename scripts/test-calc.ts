@@ -1332,6 +1332,69 @@ section("Monthly meal register");
 }
 
 // ---------------------------------------------------------------------------
+// Register vs the charge gate
+// ---------------------------------------------------------------------------
+
+section("Register excludes days the gate cannot bill");
+{
+  const members = [member("m1", "A", { joinDate: "2025-03-10" })];
+  const changes: StatusChangeData[] = [
+    { memberId: "m1", date: "2025-03-10", status: "FULL", sehri: false },
+  ];
+  const confirmed = new Set([
+    "2025-03-10", "2025-03-11", "2025-03-12", "2025-03-13", "2025-03-14",
+  ]);
+  // The gate starts on the 12th, so the 10th and 11th are billed regardless —
+  // before the start date every past day is charged as it always was.
+  const gate = mealChargeGate({ mealChargeGateStarts: "2025-03-12" }, confirmed);
+  const args = {
+    month: "2025-03" as const,
+    members,
+    rooms: ROOMS,
+    changes,
+    today: "2025-03-15" as const,
+    rateCards: [RATE_CARD],
+    guestMeals: [],
+    extras: [],
+    bills: [],
+  };
+
+  const gated = mealRegisterForMonth({ ...args, gate });
+  const g = gated.rows[0];
+
+  // Six days elapsed (10th to 15th), but only 10th-14th are billable.
+  // Cells are indexed by day of the month, so the 15th is index 14.
+  check("unconfirmed days are left out of the totals", g.fullCount, 5);
+  check("the code is still shown on the unbilled day", g.cells[14].status, "FULL");
+  check("the unbilled day is flagged", g.cells[14].billable, false);
+  check("the days before the gate are still counted", g.cells[9].billable, true);
+  check("a confirmed day is counted", g.cells[13].billable, true);
+
+  // The point of the whole change: the register must agree with the money.
+  const computation = computeMonth({ ...args, gate });
+  const cost = computation.perMember.get("m1")!;
+  check("register full count equals the billed full count", g.fullCount, cost.fullMealCount);
+
+  // With no gate the register is untouched, which is what every existing closed
+  // month and any mess that has not turned the gate on depends on.
+  const ungated = mealRegisterForMonth({ ...args });
+  check("without a gate every elapsed day is counted", ungated.rows[0].fullCount, 6);
+  check("without a gate no cell is flagged", ungated.rows[0].cells.every((c) => c.billable !== false), true);
+  const ungatedCost = computeMonth({ ...args });
+  check(
+    "an ungated register still agrees with its ledger",
+    ungated.rows[0].fullCount,
+    ungatedCost.perMember.get("m1")!.fullMealCount,
+  );
+
+  // A snapshot frozen before `billable` existed carries no flag, and must read
+  // as "counted" rather than silently dropping the day.
+  const legacy = JSON.parse(JSON.stringify(ungated));
+  check("a legacy snapshot has no flag", legacy.rows[0].cells[0].billable, undefined);
+  check("a legacy flag reads as billable", legacy.rows[0].cells[0].billable !== false, true);
+}
+
+// ---------------------------------------------------------------------------
 // Bazar duty rotation
 // ---------------------------------------------------------------------------
 

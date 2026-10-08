@@ -136,6 +136,18 @@
   font-size: 11px;
 }
 
+/*
+ * A day whose bazar is not confirmed yet. The meal really happened, so the code
+ * stays readable, but it is dimmed and struck to mark it as not yet billed —
+ * the row total excludes it, which is why it looks different from its
+ * neighbours.
+ */
+.table td.unbilled {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
 .table td.codeFull,
 .table td.codeHalfDay,
 .table td.codeHalfNight,
