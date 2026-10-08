@@ -1,0 +1,1 @@
+ALTER TABLE "monthly_settlements" ADD COLUMN "new_deductions" integer DEFAULT 0 NOT NULL;

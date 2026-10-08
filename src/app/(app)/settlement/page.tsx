@@ -65,6 +65,11 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
 
   const snapshot = await loadLedgerSnapshot();
 
+  // One gate, built once, shared by the live preview and the skipped-day
+  // warning below. Every screen that prices money must use the same one, or two
+  // screens disagree about what a day is worth.
+  const gate = mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates);
+
   // Khala is charged only on what has been paid, so a month closed with khala
   // still outstanding is billed short. Say so rather than letting the shortfall
   // quietly become nobody's cost.
@@ -125,6 +130,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
     extra: number;
     cost: number;
     deposits: number;
+    deductions: number;
     available: number;
     closing: number;
   };
@@ -148,6 +154,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       totalCost: row.totalCost,
       openingBalance: row.openingBalance,
       newDeposits: row.newDeposits,
+      newDeductions: row.newDeductions,
       availableBalance: row.availableBalance,
       closingBalance: row.closingBalance,
     }));
@@ -156,6 +163,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       extra: rows.reduce((total, row) => total + row.extraAmount, 0),
       cost: rows.reduce((total, row) => total + row.totalCost, 0),
       deposits: rows.reduce((total, row) => total + row.newDeposits, 0),
+      deductions: rows.reduce((total, row) => total + row.newDeductions, 0),
       available: rows.reduce((total, row) => total + row.availableBalance, 0),
       closing: rows.reduce((total, row) => total + row.closingBalance, 0),
     };
@@ -166,6 +174,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       // Match what closing the month would store: the flat monthly charges are
       // billed in full, so the preview and the frozen figures agree.
       finalize: true,
+      gate,
       members: snapshot.members,
       rooms: snapshot.rooms,
       changes: snapshot.changes,
@@ -213,6 +222,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       totalCost: row.totalCost,
       openingBalance: row.openingBalance,
       newDeposits: row.newDeposits,
+      newDeductions: row.newDeductions,
       availableBalance: row.availableBalance,
       closingBalance: row.closingBalance,
     }));
@@ -222,6 +232,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       extra: rows.reduce((total, row) => total + row.extraAmount, 0),
       cost: computation.totals.totalCost,
       deposits: rows.reduce((total, row) => total + row.newDeposits, 0),
+      deductions: rows.reduce((total, row) => total + row.newDeductions, 0),
       available: rows.reduce((total, row) => total + row.availableBalance, 0),
       closing: rows.reduce((total, row) => total + row.closingBalance, 0),
     };
@@ -265,7 +276,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
   // Days that had meals but no confirmed bazar, so they were never charged.
   // Closing the month freezes that for good, so the manager is warned first.
   const skippedDays = unconfirmedChargeableDays({
-    gate: mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates),
+    gate,
     members: snapshot.members,
     changes: snapshot.changes,
     guestMeals: snapshot.guestMeals,
@@ -364,6 +375,12 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
               <th className="px-3 py-2 text-right font-medium">Total cost</th>
               <th className="px-3 py-2 text-right font-medium">Opening</th>
               <th className="px-3 py-2 text-right font-medium">Deposit</th>
+              <th
+                className="px-3 py-2 text-right font-medium"
+                title="Money taken back out of this member's balance this month. Balance = Opening + Deposit − Taken out − Total cost."
+              >
+                Taken out
+              </th>
               <th className="px-3 py-2 text-right font-medium">Balance</th>
             </tr>
           </thead>
@@ -401,6 +418,9 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatTaka(row.newDeposits)}
                 </td>
+                <td className="px-3 py-2 text-right tabular-nums text-red-700">
+                  {row.newDeductions > 0 ? formatTaka(-row.newDeductions) : ""}
+                </td>
                 <td
                   className={
                     row.closingBalance < 0
@@ -415,7 +435,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={ramadanMode ? 12 : 11}
+                  colSpan={ramadanMode ? 13 : 12}
                   className="px-3 py-6 text-center text-muted-foreground"
                 >
                   No members were active in this month.
@@ -438,9 +458,12 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
                 {formatTaka(totals.cost)}
               </td>
               <td />
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatTaka(totals.deposits)}
-              </td>
+<td className="px-3 py-2 text-right tabular-nums">
+                  {formatTaka(totals.deposits)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-red-700">
+                  {totals.deductions > 0 ? formatTaka(-totals.deductions) : ""}
+                </td>
               <td className="px-3 py-2 text-right tabular-nums">
                 {formatTaka(totals.closing)}
               </td>

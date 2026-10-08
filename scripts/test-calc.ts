@@ -2882,6 +2882,109 @@ section("The days that are being given away");
   );
 }
 // ---------------------------------------------------------------------------
+// The settlement screen and the balance dashboard must agree
+// ---------------------------------------------------------------------------
+
+section("Settlement screen agrees with the balance dashboard");
+
+{
+  // A member on FULL meals every day of an open month, with a rate card whose
+  // full meal rate is a round number, so a one-day difference is unmistakable.
+  const RATE: RateCardData = { ...RATE_CARD, fullMealRate: 60 };
+  const changes: StatusChangeData[] = [
+    { memberId: "m1", date: "2025-03-01", status: "FULL", sehri: false },
+  ];
+  const common = {
+    month: "2025-03" as const,
+    cutoff: "2025-03-10",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes,
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    khalaPayments: [],
+    rateCards: [RATE],
+    today: "2025-03-10",
+  };
+
+  // The bazar was confirmed on the 1st and 2nd but never on the 3rd. The gate
+  // exists so that the 3rd is free to everybody.
+  const gate = mealChargeGate(
+    { mealChargeGateStarts: "2025-03-03" },
+    ["2025-03-01", "2025-03-02"],
+  );
+
+  const gated = computeMonth({ ...common, gate });
+  const ungated = computeMonth({ ...common });
+  check("the gate frees the unconfirmed day", gated.perMember.get("m1")!.fullMealCount, 2);
+  check("without the gate every day up to today is charged", ungated.perMember.get("m1")!.fullMealCount, 10);
+
+  // This is the regression. The settlement screen used to call `computeMonth`
+  // without handing it the gate, so it billed the unconfirmed day while the
+  // balance dashboard — which does pass the gate — gave it away. Every member
+  // was then overcharged by exactly one full meal rate, on both the preview and
+  // the frozen month, and the frozen figure propagated forever through the
+  // carry-forward chain.
+  {
+    const settlementRow = buildSettlementRows({
+      computation: gated,
+      members: MEMBERS,
+      rooms: ROOMS,
+      deposits: [],
+      deductions: [],
+      openingBalances: new Map(),
+    }).find((r) => r.memberId === "m1")!;
+
+    const running = computeRunningBalances({
+      members: MEMBERS,
+      rooms: ROOMS,
+      changes,
+      guestMeals: [],
+      extras: [],
+      bills: [],
+      rateCards: [RATE],
+      deposits: [],
+      deductions: [],
+      settlements: [],
+      openingBalances: [],
+      lastClosedMonth: null,
+      today: "2025-03-10",
+      gate,
+    }).rows.find((r) => r.memberId === "m1")!;
+
+    check(
+      "the settlement row costs exactly what the balance page costs",
+      settlementRow.totalCost,
+      running.cost,
+    );
+    check("and they reach the same balance", settlementRow.closingBalance, running.balance);
+  }
+
+  // A deduction has to be visible on the row, not only folded into the closing
+  // balance. When it was hidden, the printed arithmetic read
+  // opening + deposit − cost and still disagreed with the balance beside it.
+  {
+    const row = buildSettlementRows({
+      computation: gated,
+      members: MEMBERS,
+      rooms: ROOMS,
+      deposits: [{ memberId: "m1", date: "2025-03-01", amount: 600 }],
+      deductions: [{ memberId: "m1", date: "2025-03-01", amount: 90 }],
+      openingBalances: new Map([["m1", 306]]),
+    }).find((r) => r.memberId === "m1")!;
+
+    check("the row reports the deposit gross", row.newDeposits, 600);
+    check("the row reports what was taken out", row.newDeductions, 90);
+    check(
+      "the printed columns now reconcile to the balance",
+      row.openingBalance + row.newDeposits - row.totalCost - row.newDeductions,
+      row.closingBalance,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 

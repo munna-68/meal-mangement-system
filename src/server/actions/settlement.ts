@@ -10,6 +10,7 @@ import { fail, firstIssue, ok, type ActionResult } from "@/lib/action-result";
 import {
   buildSettlementRows,
   computeMonth,
+  mealChargeGate,
   mealRegisterForMonth,
   type RegisterSnapshot,
 } from "@/lib/calc";
@@ -119,6 +120,11 @@ export async function closeMonth(
       // The stored settlement is the month's final bill, so the flat monthly
       // charges are billed in full even when the month is closed early.
       finalize: true,
+      // The same gate the Balances page and the live preview use. Without it a
+      // month freezes the ungated cost, and because the closing balance becomes
+      // the next month's opening balance, the overcharge is carried forward
+      // forever and can only be undone by reopening and reclosing every month.
+      gate: mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates),
       members: snapshot.members,
       rooms: snapshot.rooms,
       changes: snapshot.changes,
@@ -193,6 +199,7 @@ export async function closeMonth(
             totalCost: row.totalCost,
             openingBalance: row.openingBalance,
             newDeposits: row.newDeposits,
+            newDeductions: row.newDeductions,
             availableBalance: row.availableBalance,
             closingBalance: row.closingBalance,
           })),

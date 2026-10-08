@@ -1528,6 +1528,8 @@ export interface SettlementRow extends MemberMonthCost {
   roomNumber: string;
   openingBalance: number;
   newDeposits: number;
+  /** Money taken back out of this member's balance during the month. */
+  newDeductions: number;
   availableBalance: number;
   closingBalance: number;
 }
@@ -1589,6 +1591,7 @@ export function buildSettlementRows(input: {
         roomNumber: roomById.get(member.roomId)?.number ?? "-",
         openingBalance,
         newDeposits,
+        newDeductions,
         availableBalance,
         closingBalance: availableBalance - cost.totalCost - newDeductions,
       };

@@ -25,6 +25,7 @@ export interface LedgerRowView {
   totalCost: number;
   openingBalance: number;
   newDeposits: number;
+  newDeductions: number;
   availableBalance: number;
   closingBalance: number;
 }
@@ -53,6 +54,7 @@ export function LedgerSheet({
     extra: rows.reduce((total, row) => total + row.extraAmount, 0),
     cost: rows.reduce((total, row) => total + row.totalCost, 0),
     deposits: rows.reduce((total, row) => total + row.newDeposits, 0),
+    deductions: rows.reduce((total, row) => total + row.newDeductions, 0),
     available: rows.reduce((total, row) => total + row.availableBalance, 0),
     closing: rows.reduce((total, row) => total + row.closingBalance, 0),
   };
@@ -106,6 +108,9 @@ export function LedgerSheet({
             </th>
             <th>নতুন জমা</th>
             <th>জমার পর</th>
+            <th title="এই মাসে সদস্যের ব্যালেন্স থেকে যে টাকা ফেরত নেওয়া হয়েছে">
+              প্রত্যাহার
+            </th>
             <th>এ মাসের জমা</th>
           </tr>
         </thead>
@@ -141,6 +146,11 @@ export function LedgerSheet({
               >
                 {formatTakaBengali(row.availableBalance)}
               </td>
+              <td className={styles.numeric}>
+                {row.newDeductions > 0
+                  ? formatTakaBengali(-row.newDeductions)
+                  : ""}
+              </td>
               <td
                 className={cn(styles.numeric, row.closingBalance < 0 && styles.negative)}
               >
@@ -156,6 +166,11 @@ export function LedgerSheet({
             <td />
             <td className={styles.numeric}>{formatTakaBengali(totals.deposits)}</td>
             <td className={styles.numeric}>{formatTakaBengali(totals.available)}</td>
+            <td className={styles.numeric}>
+              {totals.deductions > 0
+                ? formatTakaBengali(-totals.deductions)
+                : ""}
+            </td>
             <td
               className={cn(styles.numeric, totals.closing < 0 && styles.negative)}
             >

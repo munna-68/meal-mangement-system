@@ -294,6 +294,12 @@ export default async function BalancesPage() {
                 <th className="px-3 py-2 text-right font-medium">Khala+Wifi+Electricity</th>
                 <th className="px-3 py-2 text-right font-medium">Extras share</th>
                 <th className="px-3 py-2 text-right font-medium">Total cost</th>
+                <th
+                  className="px-3 py-2 text-right font-medium"
+                  title="Money taken back out of this member's balance in this period. Balance = Opening + Deposits − Total cost − Taken out."
+                >
+                  Taken out
+                </th>
                 <th className="px-3 py-2 text-right font-medium">Balance</th>
               </tr>
             </thead>
@@ -342,6 +348,9 @@ export default async function BalancesPage() {
                     <td className="px-3 py-2 text-right tabular-nums">
                       {formatTaka(row.cost)}
                     </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-red-700">
+                      {row.deductions > 0 ? formatTaka(-row.deductions) : ""}
+                    </td>
                     <td
                       className={cn(
                         "px-3 py-2 text-right font-semibold tabular-nums",
@@ -373,6 +382,11 @@ export default async function BalancesPage() {
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatTaka(result.summary.cost)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-red-700">
+                  {result.summary.deductions > 0
+                    ? formatTaka(-result.summary.deductions)
+                    : ""}
                 </td>
                 <td
                   className={cn(

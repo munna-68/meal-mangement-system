@@ -510,6 +510,13 @@ export const monthlySettlements = pgTable(
     totalCost: integer("total_cost").notNull().default(0),
     openingBalance: integer("opening_balance").notNull().default(0),
     newDeposits: integer("new_deposits").notNull().default(0),
+    /**
+     * Money taken back out of the member's balance during the month. Stored
+     * rather than only folded into `closingBalance` so a frozen month can still
+     * show its own arithmetic: opening + deposits − cost − taken out = closing.
+     * Null-free so a row written before this column existed still reads as zero.
+     */
+    newDeductions: integer("new_deductions").notNull().default(0),
     availableBalance: integer("available_balance").notNull().default(0),
     closingBalance: integer("closing_balance").notNull().default(0),
     createdAt: createdAt(),
