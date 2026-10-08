@@ -12,6 +12,9 @@ import {
   computeMonthlyFixedExtraSummary,
   computeRunningBalances,
   extraPoolForRange,
+  resolveGuestTimeline,
+  guestCountsOn,
+  memberDayStates,
   isSoloInSharedRoom,
   khalaAmountFor,
   latestConfirmedDay,
@@ -2981,6 +2984,169 @@ section("Settlement screen agrees with the balance dashboard");
       row.openingBalance + row.newDeposits - row.totalCost - row.newDeductions,
       row.closingBalance,
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Guest meals that carry forward
+// ---------------------------------------------------------------------------
+
+section("Guest meals carry forward when the mess asks them to");
+
+{
+  const HOST = [member("m1", "A")];
+  const FULL = [{ memberId: "m1", date: "2025-03-01", status: "FULL" as const, sehri: false }];
+  const at = (date: string, count: number): GuestMealData => ({
+    memberId: "m1",
+    date,
+    type: "GUEST_FULL",
+    count,
+  });
+
+  // OFF is the default and must stay the old behaviour, or simply deploying
+  // this would start charging people for guests nobody entered.
+  {
+    const guests = [at("2025-03-01", 2)];
+    check("off: the day itself reads 2", guestCountsOn(guests, "m1", "2025-03-01").full, 2);
+    check("off: the next day resets to 0", guestCountsOn(guests, "m1", "2025-03-02").full, 0);
+    check("off: explicit null behaves the same as off", guestCountsOn(guests, "m1", "2025-03-02", null).full, 0);
+  }
+
+  // A stored zero is not the same as an absent row once carry-forward is on.
+  {
+    const guests = [at("2025-03-01", 2), at("2025-03-03", 0)];
+    check("on: 2 carries forward", guestCountsOn(guests, "m1", "2025-03-02", "2025-03-01").full, 2);
+    check("on: an explicit 0 stops the carry", guestCountsOn(guests, "m1", "2025-03-03", "2025-03-01").full, 0);
+    check("on: and it stays 0 afterwards", guestCountsOn(guests, "m1", "2025-03-09", "2025-03-01").full, 0);
+  }
+
+  // The boundary is the whole safety argument: rows before the start date keep
+  // their old per-day meaning, so an already-billed month cannot move.
+  {
+    const guests = [at("2025-03-01", 2)];
+    const sticky = "2025-03-05";
+    check("before the start date a row is still just that day", guestCountsOn(guests, "m1", "2025-03-02", sticky).full, 0);
+    check("the first sticky day inherits the day before", guestCountsOn(guests, "m1", "2025-03-05", sticky).full, 2);
+    check("and holds it", guestCountsOn(guests, "m1", "2025-03-20", sticky).full, 2);
+  }
+
+  // Half guests are carried independently of full ones.
+  {
+    const guests: GuestMealData[] = [
+      { memberId: "m1", date: "2025-03-01", type: "GUEST_FULL", count: 1 },
+      { memberId: "m1", date: "2025-03-01", type: "GUEST_HALF", count: 3 },
+      { memberId: "m1", date: "2025-03-04", type: "GUEST_FULL", count: 0 },
+    ];
+    const read = (date: string) => guestCountsOn(guests, "m1", date, "2025-03-01");
+    check("both kinds carry", [read("2025-03-02").full, read("2025-03-02").half], [1, 3]);
+    check("zeroing one kind leaves the other", [read("2025-03-04").full, read("2025-03-04").half], [0, 3]);
+  }
+
+  // A zero row must read as "no guests" when the feature is off, or saving a
+  // zero would start costing money on a day that never had any.
+  {
+    const zeros = [at("2025-03-01", 0), at("2025-03-02", 0)];
+    check("a stored zero reads as none when off", guestCountsOn(zeros, "m1", "2025-03-01").full, 0);
+    check("a stored zero is not counted by the day total", computeDayTotals({
+      date: "2025-03-01", members: HOST, changes: FULL, guestMeals: zeros,
+      extras: [], rateCard: RATE_CARD, today: "2025-03-31",
+    }).guestFullCount, 0);
+  }
+
+  // The month engine has to charge a carried guest on every day it applies, not
+  // only on the day it was typed — otherwise the board and the bill disagree.
+  {
+    const guests = [at("2025-03-01", 2)];
+    const month = (sticky: string | null) => computeMonth({
+      month: "2025-03", members: HOST, rooms: ROOMS, changes: FULL,
+      guestMeals: guests, extras: [], bills: [], rateCards: [RATE_CARD],
+      today: "2025-03-03", stickyGuestMealsFrom: sticky,
+    });
+    check("off: charged once, on the only day with a row", month(null).totals.guestFullCount, 2);
+    check("on: charged on all three days", month("2025-03-01").totals.guestFullCount, 6);
+    check("on: and the extra two days are billed too",
+      month("2025-03-01").totals.mealAmount,
+      (2 + 1) * 60 + 6 * RATE_CARD.guestFullRate,
+    );
+  }
+
+  // Turning it on from today must not touch a day already behind us.
+  {
+    const guests = [at("2025-03-01", 2)];
+    const later = computeMonth({
+      month: "2025-03", members: HOST, rooms: ROOMS, changes: FULL,
+      guestMeals: guests, extras: [], bills: [], rateCards: [RATE_CARD],
+      today: "2025-03-03", stickyGuestMealsFrom: "2025-03-03",
+    });
+    check("a start date after the fact leaves earlier days alone", later.totals.guestFullCount, 4);
+  }
+
+  // A host who is marked OFF can still be hosting guests. This is why guests
+  // are priced in their own pass rather than behind the member's status check.
+  {
+    const OFF: StatusChangeData[] = [{ memberId: "m1", date: "2025-03-01", status: "OFF", sehri: false }];
+    const comp = computeMonth({
+      month: "2025-03", members: HOST, rooms: ROOMS, changes: OFF,
+      guestMeals: [at("2025-03-01", 2)], extras: [], bills: [], rateCards: [RATE_CARD],
+      today: "2025-03-01",
+    });
+    check("a guest is still charged when the host eats nothing", comp.totals.guestFullCount, 2);
+  }
+
+  // Carry-forward must not smuggle guests onto an unconfirmed day: the gate
+  // still decides whether a day may cost anybody anything.
+  {
+    const guests = [at("2025-03-01", 2)];
+    const gate = mealChargeGate({ mealChargeGateStarts: "2025-03-02" }, ["2025-03-01"]);
+    const comp = computeMonth({
+      month: "2025-03", members: HOST, rooms: ROOMS, changes: FULL,
+      guestMeals: guests, extras: [], bills: [], rateCards: [RATE_CARD],
+      today: "2025-03-03", stickyGuestMealsFrom: "2025-03-01", gate,
+    });
+    check("an unconfirmed day hosts no guests, carried or not", comp.totals.guestFullCount, 2);
+  }
+
+  // A recorded "none" must not make a day look like it hosted somebody, or the
+  // "days being given away" warning would fire on a day nobody visited.
+  check(
+    "a zero row is not a guest day",
+    unconfirmedChargeableDays({
+      gate: mealChargeGate({ mealChargeGateStarts: "2025-03-01" }, []),
+      members: HOST, changes: [], guestMeals: [at("2025-03-05", 0)],
+      from: "2025-03-01", to: "2025-03-10", today: "2025-03-10",
+    }),
+    [],
+  );
+  check(
+    "a real guest day still is",
+    unconfirmedChargeableDays({
+      gate: mealChargeGate({ mealChargeGateStarts: "2025-03-01" }, []),
+      members: HOST, changes: [], guestMeals: [at("2025-03-05", 1)],
+      from: "2025-03-01", to: "2025-03-10", today: "2025-03-10",
+    }),
+    ["2025-03-05"],
+  );
+
+  // The resolver is the single source of truth, so the board, the day budget and
+  // the room cards have to be reading the same numbers.
+  {
+    const guests = [at("2025-03-01", 2)];
+    const sticky = "2025-03-01";
+    const day = computeDayTotals({
+      date: "2025-03-02", members: HOST, changes: FULL, guestMeals: guests,
+      extras: [], rateCard: RATE_CARD, today: "2025-03-31", stickyGuestMealsFrom: sticky,
+    });
+    const rooms = roomBreakdownForDay({
+      date: "2025-03-02", members: HOST, rooms: ROOMS, changes: FULL,
+      guestMeals: guests, today: "2025-03-31", stickyGuestMealsFrom: sticky,
+    });
+    const states = memberDayStates({
+      date: "2025-03-02", members: HOST, changes: FULL, guestMeals: guests,
+      today: "2025-03-31", stickyGuestMealsFrom: sticky,
+    });
+    check("the day budget counts the carried guests", day.guestFullCount, 2);
+    check("the room card agrees", rooms[0].guestFullCount, 2);
+    check("the board agrees", states.get("m1")!.guestFullCount, 2);
   }
 }
 

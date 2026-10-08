@@ -33,6 +33,7 @@ export default async function MealsPage(props: PageProps<"/meals">) {
   const snapshot = await loadLedgerSnapshot();
   const closedMonth = (await getClosedMonthSet()).has(monthOf(date));
   const states = memberDayStates({
+    stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
     date,
     members: snapshot.members,
     changes: snapshot.changes,

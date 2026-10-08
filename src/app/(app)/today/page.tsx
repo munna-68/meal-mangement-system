@@ -75,6 +75,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
     deductionAmount: record?.deductionAmount ?? 0,
     ramadanMode: snapshot.settings.ramadanMode,
     today: snapshot.today,
+    stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
   });
 
   const rooms = roomBreakdownForDay({
@@ -85,6 +86,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
     guestMeals: snapshot.guestMeals,
     ramadanMode: snapshot.settings.ramadanMode,
     today: snapshot.today,
+    stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
   });
 
   const dayExtras = snapshot.extras.filter((item) => item.date === date);

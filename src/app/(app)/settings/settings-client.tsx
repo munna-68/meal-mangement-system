@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { MoonStarIcon } from "lucide-react";
-import { updateMessSettings } from "@/server/actions/settings";
+import { setStickyGuestMeals, updateMessSettings } from "@/server/actions/settings";
 import { AccountsPanel, type AccountRecord } from "./accounts-panel";
 
 export function SettingsClient({
@@ -19,6 +19,7 @@ export function SettingsClient({
   ramadanMode: initialRamadan,
   soloElectricityMultiplier: initialSoloElectricity,
   soloWifiMultiplier: initialSoloWifi,
+  stickyGuestMealsFrom: initialStickyGuests,
   accounts,
   canManageAccounts,
   currentAccountId,
@@ -28,6 +29,7 @@ export function SettingsClient({
   ramadanMode: boolean;
   soloElectricityMultiplier: number;
   soloWifiMultiplier: number;
+  stickyGuestMealsFrom: string | null;
   accounts: AccountRecord[];
   canManageAccounts: boolean;
   currentAccountId: string;
@@ -40,6 +42,11 @@ export function SettingsClient({
     String(initialSoloElectricity),
   );
   const [soloWifi, setSoloWifi] = useState(String(initialSoloWifi));
+  const [stickyGuests, setStickyGuests] = useState(initialStickyGuests ?? "");
+
+  // Kept separate from the settings form above, so saving hostel name or a wifi
+  // multiplier can never quietly reset the date this switch points at.
+  const sticky = useAction();
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">
@@ -191,6 +198,62 @@ export function SettingsClient({
           Changes to Ramadan mode take effect immediately across the app.
         </span>
       </div>
+
+      <section className="rounded-xl border bg-card p-5 shadow-sm">
+        <h2 className="text-base font-semibold">Guest meals</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A member&apos;s own meal status already carries forward: set Full today
+          and tomorrow starts as Full. Guest meals can work the same way, so a
+          host set to two full guests stays two until somebody changes it.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="sticky-guests-from">Carry forward from</Label>
+            <Input
+              id="sticky-guests-from"
+              type="date"
+              className="w-48"
+              value={stickyGuests}
+              onChange={(event) => setStickyGuests(event.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            disabled={sticky.pending}
+            onClick={() => sticky.run(() => setStickyGuestMeals({ stickyFrom: stickyGuests }))}
+          >
+            {sticky.pending ? "Saving\u2026" : "Save guest rule"}
+          </Button>
+          {sticky.error ? (
+            <span className="text-sm text-destructive">{sticky.error}</span>
+          ) : null}
+        </div>
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          {initialStickyGuests ? (
+            <>
+              On since <strong>{initialStickyGuests}</strong>. Days before that
+              keep the old behaviour, so nothing already billed changes. Clear
+              the box and save to switch it back off.
+            </>
+          ) : (
+            <>
+              Currently <strong>off</strong>, which is how the app has always
+              worked: guests reset to zero each day. Pick a start date and save to
+              turn it on from that day onward.
+            </>
+          )}
+        </p>
+
+        <Alert className="mt-3">
+          <AlertDescription className="text-xs">
+            This decides how guests are charged, so pick a date you are happy to
+            bill from. Earlier days are never recalculated, and a month that has
+            already been closed is frozen either way.
+          </AlertDescription>
+        </Alert>
+      </section>
 
       <AccountsPanel
         accounts={accounts}

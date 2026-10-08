@@ -175,6 +175,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
       // billed in full, so the preview and the frozen figures agree.
       finalize: true,
       gate,
+      stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
       members: snapshot.members,
       rooms: snapshot.rooms,
       changes: snapshot.changes,

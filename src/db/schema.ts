@@ -84,6 +84,20 @@ export const messSettings = pgTable("mess_settings", {
    * already charged and put members into credit. Null means the gate is off.
    */
   mealChargeGateStarts: dateColumn("meal_charge_gate_starts"),
+  /**
+   * From this date on, a guest count behaves like a meal status: a row is a
+   * *change* that stays in force until somebody changes it again, rather than an
+   * absolute figure for one day. So a host set to two full guests keeps two
+   * until told otherwise, and zeroing them is a recorded change instead of a
+   * deletion.
+   *
+   * Before this date a row means only "that many guests, that day", which is
+   * what the app has always done. The boundary is what makes it safe to switch
+   * on: interpreting old rows as changes would otherwise rebill every day after
+   * a guest was last seen, retroactively crediting or charging members who have
+   * already been billed. Null means the old behaviour, unchanged.
+   */
+  stickyGuestMealsFrom: dateColumn("sticky_guest_meals_from"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

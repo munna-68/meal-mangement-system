@@ -1,0 +1,1 @@
+ALTER TABLE "mess_settings" ADD COLUMN "sticky_guest_meals_from" date;

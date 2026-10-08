@@ -85,6 +85,7 @@ export default async function BalancesPage() {
     soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
     today: snapshot.today,
     gate,
+    stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
   });
 
   // Every member is listed, including one who has since left: their share of the

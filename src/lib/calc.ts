@@ -293,6 +293,171 @@ export function statusOnDate(
 }
 
 // ---------------------------------------------------------------------------
+// Guest meals
+// ---------------------------------------------------------------------------
+
+export interface GuestCounts {
+  /** Guests eating a full meal, hosted by this member. */
+  full: number;
+  /** Guests eating a half meal, hosted by this member. */
+  half: number;
+}
+
+const NO_GUESTS: GuestCounts = { full: 0, half: 0 };
+
+/**
+ * Guest counts in force for every member on every day in [from, to].
+ *
+ * Two readings of the same rows, split at `stickyFrom`:
+ *
+ * - Before it, a row is an absolute per-day figure: "that many guests, that
+ *   day". No row means none. This is how the app has always read the table.
+ * - From it on, a row is a *change* that holds until the next one, exactly like
+ *   a meal status. So a host set to two full guests keeps two until somebody
+ *   changes it, and setting them back to zero is a real change rather than the
+ *   deletion of a row.
+ *
+ * The split is what makes the change safe to ship. Reading every existing row as
+ * a change would silently rebill every day after a guest was last seen, moving
+ * money for a month that has already been charged. With `stickyFrom` null this
+ * is exactly the old behaviour, day for day.
+ *
+ * A stored zero counts as no guests, the same as no row at all. Both encodings
+ * therefore answer identically, so which one a save happened to write can never
+ * change a figure — only record whether a change was made.
+ */
+export function resolveGuestTimeline(input: {
+  guestMeals: GuestMealData[];
+  memberIds: string[];
+  from: DateKey;
+  to: DateKey;
+  stickyFrom?: DateKey | null;
+}): Map<string, Map<DateKey, GuestCounts>> {
+  const { guestMeals, memberIds, from, to, stickyFrom = null } = input;
+
+  // Everything up to the end of the window is needed: rows inside it are the
+  // changes, and rows before it are what carry-forward continues from, so the
+  // scan cannot stop at the window's start. Zero rows are kept too — they are
+  // how a carried count is stopped, and dropping them here would resurrect the
+  // guests they had cleared.
+  const relevant = guestMeals.filter((guest) => compare(guest.date, to) <= 0);
+  const byMember = new Map<string, GuestMealData[]>();
+  for (const guest of relevant) {
+    const list = byMember.get(guest.memberId);
+    if (list) list.push(guest);
+    else byMember.set(guest.memberId, [guest]);
+  }
+
+  const days: DateKey[] = [];
+  let cursor = from;
+  let guard = 0;
+  while (compare(cursor, to) <= 0) {
+    days.push(cursor);
+    cursor = addDays(cursor, 1);
+    if (++guard > 4000) break;
+  }
+
+  const timeline = new Map<string, Map<DateKey, GuestCounts>>();
+  for (const memberId of memberIds) {
+    const list = (byMember.get(memberId) ?? []).slice().sort((a, b) =>
+      compare(a.date, b.date),
+    );
+    // One row per type per day, because the table is unique on
+    // (member, date, type). A stored zero reads as "none" here, identically to
+    // the day having no row at all.
+    // Deliberately partial: a row records one type for one day, so saving two
+    // full guests must not also clear somebody's three half guests.
+    const changeOn = new Map<DateKey, Partial<GuestCounts>>();
+    for (const guest of list) {
+      const entry = changeOn.get(guest.date) ?? {};
+      const count = guest.count > 0 ? guest.count : 0;
+      if (guest.type === "GUEST_FULL") entry.full = count;
+      else entry.half = count;
+      changeOn.set(guest.date, entry);
+    }
+    const absoluteOn = (day: DateKey): GuestCounts => {
+      const entry = changeOn.get(day);
+      return { full: entry?.full ?? 0, half: entry?.half ?? 0 };
+    };
+
+    const perDay = new Map<DateKey, GuestCounts>();
+
+    if (!stickyFrom) {
+      // Carry-forward off: every day is absolute, which is the behaviour the
+      // app has always had.
+      for (const day of days) perDay.set(day, absoluteOn(day));
+      timeline.set(memberId, perDay);
+      continue;
+    }
+
+    // Days before the boundary. A row here describes that day and nothing else,
+    // so a month already billed cannot move when the mess switches this on.
+    for (const day of days) {
+      if (compare(day, stickyFrom) >= 0) break;
+      perDay.set(day, absoluteOn(day));
+    }
+
+    // The carry-forward region. The walk starts at the boundary rather than at
+    // `from`, because a change recorded inside the sticky range but before the
+    // window is just as much in force as one inside it. The first sticky day
+    // continues the count already in force instead of dropping everybody to zero
+    // on the day the switch is flipped: the seed is the most recent row per type
+    // from before the boundary, so a guest deliberately cleared stays cleared.
+    const latest = new Map<string, DateKey>();
+    for (const guest of list) {
+      if (compare(guest.date, stickyFrom) >= 0) continue;
+      const previous = latest.get(guest.type);
+      if (!previous || compare(guest.date, previous) > 0) {
+        latest.set(guest.type, guest.date);
+      }
+    }
+    let full = 0;
+    let half = 0;
+    for (const guest of list) {
+      if (guest.date !== latest.get(guest.type)) continue;
+      const count = guest.count > 0 ? guest.count : 0;
+      if (guest.type === "GUEST_FULL") full = count;
+      else half = count;
+    }
+
+    // The walk begins at the boundary itself, never earlier: a day before it is
+    // absolute and must not be overwritten by the carried value.
+    let walk = stickyFrom;
+    let steps = 0;
+    while (compare(walk, to) <= 0 && ++steps <= 4000) {
+      const change = changeOn.get(walk);
+      if (change) {
+        if (change.full !== undefined) full = change.full;
+        if (change.half !== undefined) half = change.half;
+      }
+      if (compare(walk, from) >= 0) perDay.set(walk, { full, half });
+      walk = addDays(walk, 1);
+    }
+
+    timeline.set(memberId, perDay);
+  }
+  return timeline;
+}
+
+
+/** The guest counts in force for one member on one day. Always a value. */
+export function guestCountsOn(
+  guestMeals: GuestMealData[],
+  memberId: string,
+  date: DateKey,
+  stickyFrom?: DateKey | null,
+): GuestCounts {
+  const timeline = resolveGuestTimeline({
+    guestMeals,
+    memberIds: [memberId],
+    from: date,
+    to: date,
+    stickyFrom,
+  });
+  return timeline.get(memberId)?.get(date) ?? NO_GUESTS;
+}
+
+// ---------------------------------------------------------------------------
 // Daily totals (the Today's Bazar budget)
 // ---------------------------------------------------------------------------
 
@@ -332,6 +497,8 @@ export interface DayTotalsInput {
   deductionAmount?: number;
   ramadanMode?: boolean;
   today?: DateKey;
+  /** See `resolveGuestTimeline`. Null leaves guests as a plain per-day figure. */
+  stickyGuestMealsFrom?: DateKey | null;
 }
 
 /**
@@ -403,11 +570,19 @@ export function computeDayTotals(input: DayTotalsInput): DayTotals {
 
   let guestFullCount = 0;
   let guestHalfCount = 0;
-  for (const guest of guestMeals) {
-    if (guest.date !== date) continue;
-    if (!activeIds.has(guest.memberId)) continue;
-    if (guest.type === "GUEST_FULL") guestFullCount += guest.count;
-    else guestHalfCount += guest.count;
+  // Read through the resolver rather than by matching the date, so the day
+  // budget counts the same guests the board shows and the month will charge.
+  const dayGuests = resolveGuestTimeline({
+    guestMeals,
+    memberIds: [...activeIds],
+    from: date,
+    to: date,
+    stickyFrom: input.stickyGuestMealsFrom ?? null,
+  });
+  for (const memberId of activeIds) {
+    const counts = dayGuests.get(memberId)?.get(date) ?? NO_GUESTS;
+    guestFullCount += counts.full;
+    guestHalfCount += counts.half;
   }
 
   const dailyExtras = extras.filter(
@@ -503,6 +678,7 @@ export function roomBreakdownForDay(input: {
   guestMeals: GuestMealData[];
   ramadanMode?: boolean;
   today?: DateKey;
+  stickyGuestMealsFrom?: DateKey | null;
 }): RoomDayRow[] {
   const {
     date,
@@ -553,15 +729,25 @@ export function roomBreakdownForDay(input: {
     if (ramadanMode && sehri) row.sehriCount += 1;
   }
 
-  for (const guest of guestMeals) {
-    if (guest.date !== date) continue;
-    const member = members.find((m) => m.id === guest.memberId);
+  // Read through the resolver so a room card shows the same guest counts the
+  // day budget and the month charge are using.
+  const dayGuests = resolveGuestTimeline({
+    guestMeals,
+    memberIds: members.map((member) => member.id),
+    from: date,
+    to: date,
+    stickyFrom: input.stickyGuestMealsFrom ?? null,
+  });
+  for (const [memberId, countsForDay] of dayGuests) {
+    const counts = countsForDay.get(date) ?? NO_GUESTS;
+    if (counts.full <= 0 && counts.half <= 0) continue;
+    const member = members.find((m) => m.id === memberId);
     if (!member) continue;
     if (!isMemberActiveOn(member, date, today)) continue;
     const row = rows.get(member.roomId);
     if (!row) continue;
-    if (guest.type === "GUEST_FULL") row.guestFullCount += guest.count;
-    else row.guestHalfCount += guest.count;
+    row.guestFullCount += counts.full;
+    row.guestHalfCount += counts.half;
   }
 
   return [...rows.values()]
@@ -691,8 +877,16 @@ export function memberDayStates(input: {
   changes: StatusChangeData[];
   guestMeals: GuestMealData[];
   today?: DateKey;
+  stickyGuestMealsFrom?: DateKey | null;
 }): Map<string, MemberDayState> {
-  const { date, members, changes, guestMeals, today = todayKey() } = input;
+  const {
+    date,
+    members,
+    changes,
+    guestMeals,
+    today = todayKey(),
+    stickyGuestMealsFrom = null,
+  } = input;
   const states = new Map<string, MemberDayState>();
   for (const member of members) {
     const { status, sehri } = statusOnDate(changes, member.id, date);
@@ -705,12 +899,21 @@ export function memberDayStates(input: {
       active: isMemberActiveOn(member, date, today),
     });
   }
-  for (const guest of guestMeals) {
-    if (guest.date !== date) continue;
-    const state = states.get(guest.memberId);
+  // One resolver for the whole day, so the board can never show a guest count
+  // that the day budget or the month charge would disagree with.
+  const timeline = resolveGuestTimeline({
+    guestMeals,
+    memberIds: members.map((member) => member.id),
+    from: date,
+    to: date,
+    stickyFrom: stickyGuestMealsFrom,
+  });
+  for (const member of members) {
+    const state = states.get(member.id);
     if (!state) continue;
-    if (guest.type === "GUEST_FULL") state.guestFullCount += guest.count;
-    else state.guestHalfCount += guest.count;
+    const counts = timeline.get(member.id)?.get(date) ?? NO_GUESTS;
+    state.guestFullCount = counts.full;
+    state.guestHalfCount = counts.half;
   }
   return states;
 }
@@ -1273,7 +1476,12 @@ export function unconfirmedChargeableDays(input: {
     from,
     end,
   );
-  const guestDays = new Set(guestMeals.map((guest) => guest.date));
+  // A day only counts as having guests if the row says there were some. A stored
+  // zero records "deliberately none" so it can stop a carried-forward count, and
+  // must not make the day look like it hosted somebody.
+  const guestDays = new Set(
+    guestMeals.filter((guest) => guest.count > 0).map((guest) => guest.date),
+  );
 
   const skipped: DateKey[] = [];
   let cursor = from;
@@ -1319,6 +1527,8 @@ export interface MonthComputationInput {
   khalaPayments?: KhalaPaymentData[];
   rateCards: RateCardData[];
   ramadanMode?: boolean;
+  /** See `resolveGuestTimeline`. Null leaves guests as a plain per-day figure. */
+  stickyGuestMealsFrom?: DateKey | null;
   /** Multiples of the per-head utility share charged to a solo member. */
   soloElectricityMultiplier?: number;
   soloWifiMultiplier?: number;
@@ -1342,11 +1552,13 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     khalaPayments = [],
     rateCards,
     ramadanMode = false,
+    stickyGuestMealsFrom = null,
     soloElectricityMultiplier = 2,
     soloWifiMultiplier = 1,
     today = todayKey(),
     gate = null,
   } = input;
+  const stickyFrom = stickyGuestMealsFrom;
 
   const from = monthStart(month);
   const lastDay = monthEnd(month);
@@ -1397,6 +1609,17 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
     });
   }
 
+  // Guests are priced on the day they are hosted, and read through the resolver
+  // so a count carried forward from an earlier day is charged on every day it
+  // actually applies, not only on the day it was typed.
+  const guestTimeline = resolveGuestTimeline({
+    guestMeals,
+    memberIds: activeMemberIds,
+    from,
+    to: cutoff,
+    stickyFrom,
+  });
+
   // Meal costs are priced day by day so a mid-month rate change is accurate.
   for (const day of daysInMonth(month)) {
     if (compare(day, cutoff) > 0) break;
@@ -1420,23 +1643,25 @@ export function computeMonth(input: MonthComputationInput): MonthComputation {
         row.mealAmount += card?.sehriRate ?? 0;
       }
     }
-  }
 
-  for (const guest of guestMeals) {
-    if (compare(guest.date, from) < 0) continue;
-    if (compare(guest.date, cutoff) > 0) continue;
-    // A guest meal is a meal: the gate applies to it exactly as it does to the
-    // member's own, so an unconfirmed day hosts nobody's guests either.
-    if (gate && !dayIsChargeable(guest.date, gate)) continue;
-    const row = perMember.get(guest.memberId);
-    if (!row) continue;
-    const card = rateCardFor(rateCards, guest.date);
-    if (guest.type === "GUEST_FULL") {
-      row.guestFullCount += guest.count;
-      row.mealAmount += (card?.guestFullRate ?? 0) * guest.count;
-    } else {
-      row.guestHalfCount += guest.count;
-      row.mealAmount += (card?.guestHalfRate ?? 0) * guest.count;
+    // Guests are a separate pass, and deliberately so: a host who is marked OFF
+    // can still have guests, so this must not sit behind the status check above.
+    // It does inherit the day-level gate — this loop is only reached for a day
+    // whose bazar was confirmed, so an unconfirmed day hosts nobody's guests.
+    for (const member of activeMembers) {
+      if (!isMemberActiveOn(member, day, today)) continue;
+      const counts = guestTimeline.get(member.id)?.get(day) ?? NO_GUESTS;
+      if (counts.full <= 0 && counts.half <= 0) continue;
+      const row = perMember.get(member.id);
+      if (!row) continue;
+      if (counts.full > 0) {
+        row.guestFullCount += counts.full;
+        row.mealAmount += (card?.guestFullRate ?? 0) * counts.full;
+      }
+      if (counts.half > 0) {
+        row.guestHalfCount += counts.half;
+        row.mealAmount += (card?.guestHalfRate ?? 0) * counts.half;
+      }
     }
   }
 
@@ -1656,6 +1881,8 @@ export function computeRunningBalances(input: {
   deposits: DepositData[];
   /** Money taken out of balances. Absent means none was. */
   deductions?: DeductionData[];
+  /** See `resolveGuestTimeline`. Null leaves guests as a plain per-day figure. */
+  stickyGuestMealsFrom?: DateKey | null;
   settlements: SettlementData[];
   /** Manager-declared opening balances, used to seed the first open month. */
   openingBalances: OpeningBalanceData[];
@@ -1681,6 +1908,7 @@ export function computeRunningBalances(input: {
     rateCards,
     deposits,
     deductions = [],
+    stickyGuestMealsFrom = null,
     settlements,
     openingBalances,
     lastClosedMonth,
@@ -1754,6 +1982,7 @@ export function computeRunningBalances(input: {
         khalaPayments,
         rateCards,
         ramadanMode,
+        stickyGuestMealsFrom,
         soloElectricityMultiplier,
         soloWifiMultiplier,
         today,

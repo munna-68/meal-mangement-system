@@ -26,6 +26,7 @@ export default async function SettingsPage() {
         ramadanMode={settings.ramadanMode}
         soloElectricityMultiplier={settings.soloElectricityMultiplier}
         soloWifiMultiplier={settings.soloWifiMultiplier}
+        stickyGuestMealsFrom={settings.stickyGuestMealsFrom}
         accounts={accounts.map((account) => ({
           id: account.id,
           username: account.username,

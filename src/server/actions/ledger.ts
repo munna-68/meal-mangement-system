@@ -654,6 +654,10 @@ async function liveBalanceFor(memberId: string): Promise<number | null> {
     soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
     soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
     today: snapshot.today,
+    // Same reasoning for the guest rule: the guard below has to compare against
+    // exactly what the Balances page shows, or a deduction could be allowed that
+    // the dashboard would render as money the member does not have.
+    stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
     // The same gate the Balances page uses, or the guard below would compare the
     // typed amount against a different number than the manager is looking at.
     gate: mealChargeGate(

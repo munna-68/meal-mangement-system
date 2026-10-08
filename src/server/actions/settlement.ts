@@ -125,6 +125,7 @@ export async function closeMonth(
       // the next month's opening balance, the overcharge is carried forward
       // forever and can only be undone by reopening and reclosing every month.
       gate: mealChargeGate(snapshot.settings, snapshot.confirmedBazarDates),
+      stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
       members: snapshot.members,
       rooms: snapshot.rooms,
       changes: snapshot.changes,

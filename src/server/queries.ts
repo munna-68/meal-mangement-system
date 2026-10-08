@@ -99,6 +99,7 @@ export async function getMessSettings(): Promise<MessSettingsData | null> {
     soloElectricityMultiplier: row.soloElectricityMultiplier,
     soloWifiMultiplier: row.soloWifiMultiplier,
     mealChargeGateStarts: row.mealChargeGateStarts,
+    stickyGuestMealsFrom: row.stickyGuestMealsFrom,
   };
 }
 
@@ -604,9 +605,13 @@ export async function getEarliestActivityDate(): Promise<DateKey | null> {
     db
       .select({ earliest: sql<string | null>`min(${mealStatusChanges.date})` })
       .from(mealStatusChanges),
+    // `count > 0` so a recorded "none" does not count as activity. A zero row is
+    // how a carried-forward guest count is stopped, and it would otherwise make
+    // a month look busy and pull the open accounting period earlier.
     db
       .select({ earliest: sql<string | null>`min(${guestMeals.date})` })
-      .from(guestMeals),
+      .from(guestMeals)
+      .where(sql`${guestMeals.count} > 0`),
     db
       .select({ earliest: sql<string | null>`min(${deposits.date})` })
       .from(deposits),

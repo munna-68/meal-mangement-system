@@ -15,6 +15,13 @@ export interface MessSettingsData {
    * is off, which is the behaviour this app always had.
    */
   mealChargeGateStarts: string | null;
+  /**
+   * First day on which a guest count carries forward until it is changed, the
+   * way a meal status does. Null (the fallback, and a database that predates
+   * the column) leaves guests as a plain per-day figure, which is what this app
+   * has always done.
+   */
+  stickyGuestMealsFrom: string | null;
 }
 
 export const FALLBACK_SETTINGS: MessSettingsData = {
@@ -24,6 +31,7 @@ export const FALLBACK_SETTINGS: MessSettingsData = {
   soloElectricityMultiplier: 2,
   soloWifiMultiplier: 1,
   mealChargeGateStarts: null,
+  stickyGuestMealsFrom: null,
 };
 
 export const MEAL_STATUS_VALUES = [

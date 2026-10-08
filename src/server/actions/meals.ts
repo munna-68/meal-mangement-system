@@ -154,25 +154,19 @@ export async function setGuestMeal(input: z.infer<typeof guestSchema>): Promise<
     const label = type === "GUEST_FULL" ? "full" : "half";
 
     await db.transaction(async (tx) => {
-      if (count <= 0) {
-        await tx
-          .delete(guestMeals)
-          .where(
-            and(
-              eq(guestMeals.memberId, memberId),
-              eq(guestMeals.date, date),
-              eq(guestMeals.type, type),
-            ),
-          );
-      } else {
-        await tx
-          .insert(guestMeals)
-          .values({ memberId, date, type, count })
-          .onConflictDoUpdate({
-            target: [guestMeals.memberId, guestMeals.date, guestMeals.type],
-            set: { count },
-          });
-      }
+      // The row is always written, including for zero. Once guest counts carry
+      // forward, zeroing a day is a real instruction — "none from here on" —
+      // and deleting the row would instead leave the previous count in force,
+      // which is the opposite of what was asked. Before carry-forward is turned
+      // on a zero row reads as no guests, exactly as an absent row does, so
+      // storing it changes no figure either way.
+      await tx
+        .insert(guestMeals)
+        .values({ memberId, date, type, count })
+        .onConflictDoUpdate({
+          target: [guestMeals.memberId, guestMeals.date, guestMeals.type],
+          set: { count },
+        });
 
       await recordAudit(
         {
