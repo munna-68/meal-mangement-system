@@ -434,8 +434,9 @@ export const deposits = pgTable(
  *
  * `amount` is stored positive — the manager types how much to take out, never a
  * minus sign — so a row can never be misread as a deposit by a future query.
- * `createDeduction` refuses an amount larger than the member's current balance,
- * which is why a deduction can never be what puts someone into deficit.
+ * A withdrawal may exceed the balance (a refund can be real while the member
+ * still owes the mess), but `createDeduction` stops and asks for confirmation
+ * first, so a deduction only ever puts someone into deficit on purpose.
  */
 export const deductions = pgTable(
   "deductions",

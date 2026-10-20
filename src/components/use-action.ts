@@ -16,7 +16,12 @@ export function useAction() {
 
   function run(
     action: () => Promise<ActionResult>,
-    options?: { onSuccess?: () => void; successMessage?: string },
+    options?: {
+      onSuccess?: () => void;
+      successMessage?: string;
+      /** Called instead of showing an error when the action needs a yes/no. */
+      onConfirmationRequired?: (result: ActionResult) => void;
+    },
   ) {
     setError(null);
     startTransition(async () => {
@@ -27,6 +32,8 @@ export function useAction() {
             result.message ?? options?.successMessage ?? "Saved",
           );
           options?.onSuccess?.();
+        } else if (result.code && options?.onConfirmationRequired) {
+          options.onConfirmationRequired(result);
         } else {
           const message = result.error ?? "Something went wrong";
           setError(message);

@@ -4,12 +4,21 @@ export interface ActionResult {
   ok: boolean;
   error?: string;
   message?: string;
+  /**
+   * Set when the action stopped only because the caller has to confirm
+   * something first. The browser shows the warning and retries with the
+   * confirmation flag instead of treating it as a failure.
+   */
+  code?: "CONFIRM_NEGATIVE_BALANCE";
 }
 
 export const OK: ActionResult = { ok: true };
 
-export function fail(error: string): ActionResult {
-  return { ok: false, error };
+export function fail(
+  error: string,
+  code?: ActionResult["code"],
+): ActionResult {
+  return code ? { ok: false, error, code } : { ok: false, error };
 }
 
 export function ok(message?: string): ActionResult {

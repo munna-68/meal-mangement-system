@@ -74,6 +74,7 @@ import {
   resolveMember,
 } from "../src/lib/import-csv";
 import { firstIssue, takaAmount } from "../src/lib/action-result";
+import { deductionWarning } from "../src/lib/deduction";
 import { isValidDateKey, isValidMonthKey } from "../src/lib/dates";
 
 let passed = 0;
@@ -994,6 +995,141 @@ section("Taking money out (deductions)");
       100,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Taking out more than the balance (negative balances are real debts)
+// ---------------------------------------------------------------------------
+
+section("Taking money out below zero");
+{
+  // A zeroed rate card, so the only money on the row is the opening balance and
+  // the withdrawal: nothing else can muddy the -100 -> -200 arithmetic.
+  const FREE: RateCardData = {
+    ...RATE_CARD,
+    fullMealRate: 0,
+    halfMealRate: 0,
+    guestFullRate: 0,
+    guestHalfRate: 0,
+    sehriRate: 0,
+    feastFlatCharge: 0,
+    khalaNormalRate: 0,
+    khalaSoloRate: 0,
+    managerDailyFee: 0,
+    dailyExtraAmount: 0,
+  };
+  const computation = computeMonth({
+    month: "2025-03",
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: FULL_FROM_MARCH_1,
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    khalaPayments: [],
+    rateCards: [FREE],
+    today: "2025-03-31",
+  });
+
+  // The headline case: already at -100, another 100 taken out leaves -200. It
+  // must be recorded in full, not clamped at zero.
+  const rows = buildSettlementRows({
+    computation,
+    members: MEMBERS,
+    rooms: ROOMS,
+    deposits: [],
+    deductions: [{ memberId: "m1", date: "2025-03-20", amount: 100 }],
+    openingBalances: new Map([["m1", -100]]),
+  });
+  const m1 = rows.find((row) => row.memberId === "m1")!;
+  check("an already-negative balance can go further negative", m1.closingBalance, -200);
+  check("the withdrawal is still reported in full", m1.newDeductions, 100);
+  check(
+    "the printed arithmetic reconciles on a negative balance",
+    m1.openingBalance + m1.newDeposits - m1.totalCost - m1.newDeductions,
+    m1.closingBalance,
+  );
+
+  // The balances dashboard must show the same -200, not floor it at zero.
+  const running = computeRunningBalances({
+    members: MEMBERS,
+    rooms: ROOMS,
+    changes: [],
+    guestMeals: [],
+    extras: [],
+    bills: [],
+    rateCards: [FREE],
+    deposits: [],
+    deductions: [{ memberId: "m1", date: "2025-03-20", amount: 100 }],
+    settlements: [],
+    openingBalances: [{ memberId: "m1", month: "2025-03", amount: -100 }],
+    lastClosedMonth: null,
+    today: "2025-03-31",
+  });
+  check(
+    "the dashboard balance is -200",
+    running.rows.find((row) => row.memberId === "m1")!.balance,
+    -200,
+  );
+  check("the member is counted in deficit", running.summary.membersInDeficit, 1);
+  check("the deficit is the full 200, not 100", running.summary.totalDeficit, 200);
+}
+
+// ---------------------------------------------------------------------------
+// The warning before a withdrawal goes negative
+// ---------------------------------------------------------------------------
+
+section("The warning before a withdrawal goes negative");
+{
+  check(
+    "a covered withdrawal needs no warning",
+    deductionWarning({ memberName: "Rahim", balance: 500, amount: 500 }),
+    null,
+  );
+  check(
+    "money left over needs no warning",
+    deductionWarning({ memberName: "Rahim", balance: 500, amount: 100 }),
+    null,
+  );
+
+  const alreadyNegative = deductionWarning({
+    memberName: "Rahim",
+    balance: -100,
+    amount: 100,
+  });
+  check("an already-negative balance warns", alreadyNegative !== null, true);
+  check(
+    "the warning names the current balance",
+    alreadyNegative?.includes("-৳100") ?? false,
+    true,
+  );
+  check(
+    "the warning names the resulting balance",
+    alreadyNegative?.includes("-৳200") ?? false,
+    true,
+  );
+  check(
+    "the warning asks the manager to confirm",
+    /are you sure/i.test(alreadyNegative ?? ""),
+    true,
+  );
+
+  const crossing = deductionWarning({
+    memberName: "Rahim",
+    balance: 50,
+    amount: 51,
+  });
+  check("crossing zero from a positive balance warns", crossing !== null, true);
+  check(
+    "the crossing warning names the resulting negative",
+    crossing?.includes("-৳1") ?? false,
+    true,
+  );
+  check(
+    "a zero balance warns before the first taka leaves",
+    deductionWarning({ memberName: "Rahim", balance: 0, amount: 1 }) !== null,
+    true,
+  );
 }
 
 // ---------------------------------------------------------------------------

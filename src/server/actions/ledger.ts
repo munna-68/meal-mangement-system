@@ -32,7 +32,9 @@ import {
   monthEnd,
   monthOf,
   monthStart,
+  todayKey,
 } from "@/lib/dates";
+import { deductionWarning } from "@/lib/deduction";
 import { formatTaka, sum } from "@/lib/money";
 import { ensureAutoExtrasForMonth } from "@/server/auto-extras";
 import { requireSession } from "@/server/auth";
@@ -615,6 +617,12 @@ const deductionSchema = z.object({
   amount: takaAmount(1),
   notes: z.string().max(300).optional(),
   /**
+   * Set only after the manager has seen the warning that this withdrawal takes
+   * the balance below zero. Without it the action stops and asks, so money can
+   * never silently overdraw an account.
+   */
+  confirmNegative: z.boolean().optional().default(false),
+  /**
    * Generated once per submission in the browser and reused until the save
    * succeeds, so a double-click cannot take the same money out twice.
    */
@@ -627,14 +635,16 @@ const deductionSchema = z.object({
  *
  * The recurring daily costs are materialised first, because they are rows in
  * `extra_line_items`: without them the month-to-date cost is understated, the
- * balance comes out too high, and the guard below would let more out than the
- * member actually has.
+ * balance comes out too high, and the confirmation warning would quote a
+ * figure the Balances page disagrees with.
  *
  * Returns null when the member is not in the ledger at all.
  */
 async function liveBalanceFor(memberId: string): Promise<number | null> {
+  // Materialise first, then read: the snapshot has to contain the recurring
+  // costs, or the warning would quote a balance higher than the Balances page.
+  await ensureAutoExtrasForMonth(monthOf(todayKey()));
   const snapshot = await loadLedgerSnapshot();
-  await ensureAutoExtrasForMonth(monthOf(snapshot.today));
 
   const result = computeRunningBalances({
     members: snapshot.members,
@@ -654,11 +664,11 @@ async function liveBalanceFor(memberId: string): Promise<number | null> {
     soloElectricityMultiplier: snapshot.settings.soloElectricityMultiplier,
     soloWifiMultiplier: snapshot.settings.soloWifiMultiplier,
     today: snapshot.today,
-    // Same reasoning for the guest rule: the guard below has to compare against
-    // exactly what the Balances page shows, or a deduction could be allowed that
-    // the dashboard would render as money the member does not have.
+    // Same reasoning for the guest rule: the warning below has to quote exactly
+    // what the Balances page shows, or a manager would confirm one figure and
+    // watch a different one land in the account.
     stickyGuestMealsFrom: snapshot.settings.stickyGuestMealsFrom,
-    // The same gate the Balances page uses, or the guard below would compare the
+    // The same gate the Balances page uses, or the warning would compare the
     // typed amount against a different number than the manager is looking at.
     gate: mealChargeGate(
       snapshot.settings,
@@ -687,25 +697,26 @@ export async function createDeduction(
     const names = await getMemberNames([parsed.data.memberId]);
     const memberName = names.get(parsed.data.memberId) ?? parsed.data.memberId;
 
-    // Only ever take out money the member actually has. The guard reads the
-    // same figure the Balances screen shows, so what the manager can see is
-    // exactly what they are allowed to remove — and a second deduction after the
-    // first is measured against the balance the first one left.
+    // Taking money out is deliberately not capped at the balance: a refund can
+    // be real even when the member already owes the mess. But it must never
+    // happen silently, so the first attempt stops with a warning and the
+    // browser retries with `confirmNegative` once the manager agrees.
     const available = await liveBalanceFor(parsed.data.memberId);
     if (available === null) {
-      return fail("That member is not in the ledger, so there is no balance to take from.");
-    }
-    if (parsed.data.amount > available) {
       return fail(
-        available <= 0
-          ? `${memberName} has ${formatTaka(available)} in hand, so nothing can be taken out.`
-          : `${memberName} has only ${formatTaka(available)} in hand, so ${formatTaka(
-              parsed.data.amount,
-            )} cannot be taken out. Reduce it to ${formatTaka(available)} or less.`,
+        "That member is not in the ledger, so there is no balance to take from.",
       );
     }
+    const warning = deductionWarning({
+      memberName,
+      balance: available,
+      amount: parsed.data.amount,
+    });
+    if (warning && !parsed.data.confirmNegative) {
+      return fail(warning, "CONFIRM_NEGATIVE_BALANCE");
+    }
 
-    const { idempotencyKey, ...values } = parsed.data;
+    const { idempotencyKey, confirmNegative, ...values } = parsed.data;
 
     await db.transaction(async (tx) => {
       // The unique index on `idempotency_key` means the second of two clicks
@@ -735,6 +746,8 @@ export async function createDeduction(
             date: parsed.data.date,
             amount: parsed.data.amount,
             balanceBefore: available,
+            balanceAfter: available - parsed.data.amount,
+            confirmedNegative: confirmNegative,
           },
         },
         tx,

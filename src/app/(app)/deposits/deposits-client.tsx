@@ -6,6 +6,16 @@ import { TrashIcon } from "lucide-react";
 import { MemberPicker } from "@/components/member-picker";
 import { useAction } from "@/components/use-action";
 import { useIdempotencyKey } from "@/components/use-idempotency-key";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +48,14 @@ export interface DepositMemberOption {
   total: number;
   /** Money already taken back out of this member's balance, all time. */
   takenOut: number;
+}
+
+type DeductionInput = Parameters<typeof createDeduction>[0];
+
+/** A withdrawal the server paused on because it would leave the balance below zero. */
+interface PendingDeduction {
+  input: DeductionInput;
+  warning: string;
 }
 
 /** One line of the combined money ledger, in whichever direction it moved. */
@@ -74,6 +92,43 @@ export function DepositsClient({
   const [outDate, setOutDate] = useState(todayKey());
   const [outAmount, setOutAmount] = useState("");
   const [outNotes, setOutNotes] = useState("");
+  const [pendingDeduction, setPendingDeduction] =
+    useState<PendingDeduction | null>(null);
+
+  /**
+   * A first attempt (`captured` absent) sends the form as typed. The server
+   * answers with a warning when the balance cannot cover it; confirming the
+   * dialog resends the exact same input — same idempotency key — with
+   * `confirmNegative` set, so the money is only ever recorded once.
+   */
+  function submitDeduction(captured?: PendingDeduction) {
+    const input: DeductionInput =
+      captured?.input ?? {
+        memberId: outMemberId,
+        date: outDate,
+        amount: outAmount,
+        notes: outNotes,
+        idempotencyKey: idempotency.current(),
+      };
+
+    run(
+      () =>
+        createDeduction({ ...input, confirmNegative: captured !== undefined }),
+      {
+        onSuccess: () => {
+          idempotency.reset();
+          setOutAmount("");
+          setOutNotes("");
+          setPendingDeduction(null);
+        },
+        onConfirmationRequired: (result) =>
+          setPendingDeduction({
+            input,
+            warning: result.error ?? "This will leave the balance negative.",
+          }),
+      },
+    );
+  }
 
   const selectedMember = members.find((member) => member.id === depositMemberId);
   const grandTotal = members.reduce((total, member) => total + member.total, 0);
@@ -194,8 +249,9 @@ export function DepositsClient({
           <h2 className="font-heading text-sm font-semibold">Take money out</h2>
           <p className="text-xs text-muted-foreground">
             Money handed back to a member, or refunded. Enter the amount to take
-            out — it comes off their balance, and you cannot take out more than
-            they have in hand.
+            out — it comes off their balance. Taking out more than they have is
+            allowed, but you will be warned first if it leaves the balance
+            negative.
           </p>
         </header>
         <div className="grid gap-3 p-4 lg:grid-cols-[1.4fr_1fr_1fr_1.6fr_auto] lg:items-end">
@@ -245,30 +301,41 @@ export function DepositsClient({
           <Button
             variant="secondary"
             disabled={pending || !outMemberId || !outAmount}
-            onClick={() =>
-              run(
-                () =>
-                  createDeduction({
-                    memberId: outMemberId,
-                    date: outDate,
-                    amount: outAmount,
-                    notes: outNotes,
-                    idempotencyKey: idempotency.current(),
-                  }),
-                {
-                  onSuccess: () => {
-                    idempotency.reset();
-                    setOutAmount("");
-                    setOutNotes("");
-                  },
-                },
-              )
-            }
+            onClick={() => submitDeduction()}
           >
             Take money out
           </Button>
         </div>
       </section>
+
+      <AlertDialog
+        open={pendingDeduction !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeduction(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Balance will go negative</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeduction?.warning}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingDeduction) submitDeduction(pendingDeduction);
+              }}
+            >
+              Yes, take money out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <section className="rounded-xl border bg-card shadow-sm">
         <header className="flex items-center justify-between border-b px-4 py-3">
