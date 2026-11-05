@@ -569,7 +569,7 @@ export function ExtrasClient({
             </Button>
           </div>
         </header>
-        <div className="overflow-x-auto">
+        <div className="table-scroll table-scroll-actions">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>
@@ -869,7 +869,7 @@ export function ExtrasClient({
             full month is expected to come to.
           </p>
         </header>
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>

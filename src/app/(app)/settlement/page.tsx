@@ -358,7 +358,7 @@ export default async function SettlementPage(props: PageProps<"/settlement">) {
         </Alert>
       ) : null}
 
-      <div className="mt-5 overflow-x-auto rounded-xl border bg-card shadow-sm">
+      <div className="mt-5 table-scroll rounded-xl border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>

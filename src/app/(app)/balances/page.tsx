@@ -284,7 +284,7 @@ export default async function BalancesPage() {
         description="Running balance = opening + deposits − month-to-date cost − money taken out."
         contentClassName="p-0"
       >
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>
