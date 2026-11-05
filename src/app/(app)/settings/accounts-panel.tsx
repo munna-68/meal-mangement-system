@@ -100,7 +100,7 @@ export function AccountsPanel({
         </Alert>
       ) : null}
 
-      <div className="mt-4 overflow-x-auto">
+      <div className="mt-4 table-scroll table-scroll-actions">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>

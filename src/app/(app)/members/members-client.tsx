@@ -116,7 +116,7 @@ export function MembersClient({
             Add room
           </Button>
         </header>
-        <div className="overflow-x-auto">
+        <div className="table-scroll table-scroll-actions">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>
@@ -207,7 +207,7 @@ export function MembersClient({
             Add member
           </Button>
         </header>
-        <div className="overflow-x-auto">
+        <div className="table-scroll table-scroll-actions">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>

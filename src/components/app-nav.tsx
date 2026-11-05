@@ -118,14 +118,14 @@ function AllScreensSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-72">
+      <SheetContent side="right" className="w-[min(18rem,85vw)] pt-[env(safe-area-inset-top)]">
         <SheetHeader>
           <SheetTitle>All screens</SheetTitle>
           <SheetDescription className="sr-only">
             Navigate to any screen in the mess register.
           </SheetDescription>
         </SheetHeader>
-        <div className="flex flex-col gap-1 px-4 pb-6">
+        <div className="flex flex-col gap-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
           {NAV_ITEMS.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
@@ -136,10 +136,10 @@ function AllScreensSheet({
                 onClick={() => onOpenChange(false)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
+                  "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   active
                     ? "bg-primary text-primary-foreground"
-                    : "text-foreground hover:bg-muted",
+                    : "text-foreground hover:bg-muted active:bg-muted",
                 )}
               >
                 <Icon className="size-4" />
@@ -183,8 +183,11 @@ export function MobileNav() {
   const primary = NAV_ITEMS.filter((item) => item.primary);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-      <div className="grid grid-cols-4">
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-8px_rgb(0_0_0/0.12)] backdrop-blur-md lg:hidden"
+    >
+      <div className="mx-auto grid max-w-lg grid-cols-4 px-1">
         {primary.map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = item.icon;
@@ -194,11 +197,18 @@ export function MobileNav() {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium",
-                active ? "text-primary" : "text-muted-foreground",
+                "group flex min-h-14 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] font-medium transition-colors",
+                active ? "text-primary" : "text-muted-foreground active:text-foreground",
               )}
             >
-              <Icon className="size-5" />
+              <span
+                className={cn(
+                  "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
+                  active ? "bg-primary/12" : "group-active:bg-muted",
+                )}
+              >
+                <Icon className="size-5" />
+              </span>
               {item.short}
             </Link>
           );
@@ -207,9 +217,11 @@ export function MobileNav() {
         <form action={logoutAction} className="contents">
           <button
             type="submit"
-            className="flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground"
+            className="group flex min-h-14 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] font-medium text-muted-foreground active:text-foreground"
           >
-            <LogOutIcon className="size-5" />
+            <span className="flex h-7 w-12 items-center justify-center rounded-full group-active:bg-muted">
+              <LogOutIcon className="size-5" />
+            </span>
             Lock
           </button>
         </form>

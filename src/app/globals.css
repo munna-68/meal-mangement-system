@@ -56,9 +56,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --primary: oklch(0.52 0.11 165);
+  --primary-foreground: oklch(0.99 0.01 165);
+  --secondary: oklch(0.96 0.01 165);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
@@ -67,7 +67,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.7 0.1 165);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -82,7 +82,7 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --background: oklch(1 0 0);
+  --background: oklch(0.982 0.004 165);
   --foreground: oklch(0.145 0 0);
 }
 
@@ -93,8 +93,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.72 0.13 165);
+  --primary-foreground: oklch(0.18 0.03 165);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -129,5 +129,83 @@
   }
   html {
     @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* The on-screen keyboard and the bottom bar both cover the page on phones;
+     keep focused fields clear of the sticky header and the bottom bar. */
+  input,
+  select,
+  textarea,
+  button {
+    scroll-margin-top: 4.5rem;
+    scroll-margin-bottom: 6rem;
+  }
+
+  /* Bigger tap targets on touch screens. min-height leaves any explicit,
+     larger height alone, so only the compact desktop sizes grow. */
+  @media (pointer: coarse) {
+    [data-slot="button"][data-size="default"],
+    [data-slot="input"],
+    [data-slot="select-trigger"][data-size="default"] {
+      min-height: 2.5rem;
+    }
+    [data-slot="button"][data-size="sm"] {
+      min-height: 2.25rem;
+    }
+    [data-slot="button"][data-size="icon"] {
+      min-width: 2.5rem;
+      min-height: 2.5rem;
+    }
+  }
+}
+
+/*
+ * Wide data tables. They scroll sideways inside their card instead of
+ * stretching the page, and on small screens the first column (room / date /
+ * name) stays pinned so a row is still readable halfway across. Tables whose
+ * last column holds the row's buttons add .table-scroll-actions to pin that
+ * column to the right edge too, so Edit / Delete never scroll out of reach.
+ */
+@layer components {
+  .table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .table-scroll th {
+    white-space: nowrap;
+  }
+  .table-scroll tbody tr {
+    transition: background-color 120ms ease;
+  }
+  .table-scroll tbody tr:hover {
+    background-color: color-mix(in oklch, var(--muted) 55%, transparent);
+  }
+
+  @media (max-width: 1023px) {
+    .table-scroll :is(thead, tbody) :is(th, td):first-child:not([colspan]),
+    .table-scroll-actions :is(thead, tbody) :is(th, td):last-child:not([colspan]) {
+      position: sticky;
+      z-index: 1;
+      background-color: var(--card);
+    }
+    .table-scroll :is(thead, tbody) :is(th, td):first-child:not([colspan]) {
+      left: 0;
+      box-shadow: inset -1px 0 0 var(--border);
+    }
+    .table-scroll-actions :is(thead, tbody) :is(th, td):last-child:not([colspan]) {
+      right: 0;
+      box-shadow: inset 1px 0 0 var(--border);
+    }
+    .table-scroll thead th:first-child,
+    .table-scroll-actions thead th:last-child {
+      background-image: linear-gradient(
+        color-mix(in oklch, var(--muted) 40%, transparent),
+        color-mix(in oklch, var(--muted) 40%, transparent)
+      );
+    }
   }
 }

@@ -556,13 +556,13 @@ export function BazarWorkspace({
           </div>
         </section>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <Button
             type="submit"
             size="lg"
             disabled={saving || isFuture}
             className={cn(
-              "text-base",
+              "h-11 w-full text-base sm:h-9 sm:w-auto",
               isConfirmed
                 ? "bg-emerald-700 text-white hover:bg-emerald-800"
                 : "bg-emerald-600 text-white hover:bg-emerald-700",
@@ -588,6 +588,7 @@ export function BazarWorkspace({
             format="a4"
             orientation="portrait"
             size="lg"
+            className="h-11 w-full sm:h-9 sm:w-auto"
             beforeExport={isFuture ? undefined : confirmThenExport}
             variant="outline"
           />

@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { KeyRoundIcon } from "lucide-react";
+import { KeyRoundIcon, UtensilsCrossedIcon } from "lucide-react";
 import { countAccounts, getMessSettings } from "@/server/queries";
 import { LoginForm } from "./login-form";
 
@@ -38,10 +38,16 @@ export default async function LoginPage(props: PageProps<"/login">) {
   }
 
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted/40 p-4">
+    <main className="flex min-h-svh flex-col items-center justify-center gap-6 bg-[radial-gradient(ellipse_at_top,color-mix(in_oklch,var(--primary)_14%,transparent),transparent_60%)] p-4">
       <div className="w-full max-w-sm">
-        <Card>
-          <CardHeader className="text-center">
+        <Card className="shadow-lg">
+          <CardHeader className="items-center text-center">
+            <span
+              aria-hidden
+              className="mx-auto mb-2 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm"
+            >
+              <UtensilsCrossedIcon className="size-6" />
+            </span>
             <CardTitle className="text-xl leading-snug">{hostelName}</CardTitle>
             {address ? (
               <CardDescription className="text-balance">{address}</CardDescription>
